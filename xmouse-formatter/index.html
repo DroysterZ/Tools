@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Formatador de Macros</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    background: #1e1e1e;
+    color: #eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin-bottom: 12px; }
+  textarea {
+    width: 100%;
+    max-width: 800px;
+    height: 300px;
+    background: #111;
+    color: #0f0;
+    font-family: "Courier New", monospace;
+    font-size: 14px;
+    padding: 12px;
+    border: 1px solid #444;
+    border-radius: 6px;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  button {
+    margin-top: 14px;
+    padding: 10px 20px;
+    font-size: 15px;
+    background: #2d7d46;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: #35a355; }
+  #status {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #9be79b;
+    min-height: 18px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Formatador de Macros</h1>
+<textarea id="input" placeholder="Escreva seu código aqui livremente, com quebras de linha e comentários // ..."></textarea>
+<button id="copyBtn">Copiar formatado</button>
+<div id="status"></div>
+
+<script>
+document.getElementById('copyBtn').addEventListener('click', function() {
+  const raw = document.getElementById('input').value;
+
+  const linhas = raw.split('\n').map(function(linha) {
+    const idx = linha.indexOf('//');
+    if (idx !== -1) {
+      linha = linha.substring(0, idx);
+    }
+    return linha.trim();
+  }).filter(function(linha) {
+    return linha.length > 0;
+  });
+
+  const resultado = linhas.join('');
+
+  navigator.clipboard.writeText(resultado).then(function() {
+    const status = document.getElementById('status');
+    status.textContent = 'Copiado para a área de transferência!';
+    setTimeout(function() { status.textContent = ''; }, 2500);
+  }).catch(function(err) {
+    document.getElementById('status').textContent = 'Erro ao copiar: ' + err;
+  });
+});
+</script>
+
+</body>
+</html>

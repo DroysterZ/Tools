@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise da fatura</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topo">
+  <h1>Análise da fatura</h1>
+  <div class="acoes">
+    <button id="btn-importar" class="btn primario">Importar CSV</button>
+    <input type="file" id="arquivo" accept=".csv,text/csv" hidden>
+    <button id="btn-adicionar" class="btn">Novo gasto</button>
+    <button id="btn-categoria" class="btn">Nova categoria</button>
+    <button id="btn-baixar-json" class="btn">Baixar JSON</button>
+    <button id="btn-importar-json" class="btn">Importar JSON</button>
+    <input type="file" id="arquivo-json" accept=".json,application/json" hidden>
+    <button id="btn-limpar-lancamentos" class="btn perigo">Limpar lançamentos</button>
+    <button id="btn-limpar" class="btn perigo">Limpar armazenamento</button>
+  </div>
+</header>
+
+<main>
+  <section class="lista" aria-label="Lançamentos">
+    <div class="filtros">
+      <input type="search" id="busca" placeholder="Buscar por descrição" aria-label="Buscar por descrição">
+      <select id="filtro-categoria" aria-label="Filtrar por categoria"></select>
+      <span id="contagem"></span>
+    </div>
+    <div class="tabela-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-campo="data"><button class="ord">Data</button></th>
+            <th data-campo="titulo"><button class="ord">Descrição</button></th>
+            <th data-campo="categoria"><button class="ord">Categoria</button></th>
+            <th data-campo="valor" class="dir"><button class="ord">Valor (R$)</button></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="linhas"></tbody>
+      </table>
+    </div>
+    <p id="vazio" class="vazio" hidden>Nenhum lançamento. Clique em “Importar CSV” e escolha o arquivo da fatura.</p>
+  </section>
+
+  <aside class="graficos" aria-label="Gastos por categoria">
+    <h2>Gastos por categoria</h2>
+    <div id="rosca" class="rosca">
+      <div class="centro"><span id="total">R$ 0,00</span><small>em gastos</small></div>
+    </div>
+    <ul id="legenda" class="legenda"></ul>
+    <p class="nota">Pagamentos e créditos (valores negativos) ficam fora dos gráficos.</p>
+    <details class="regras-box">
+      <summary id="regras-resumo">Regras salvas</summary>
+      <p class="nota">Edite o texto ou a categoria direto na lista. O texto vale se aparecer em qualquer parte da descrição (ex.: “Loja X Parcela” cobre “Loja X Parcela 1/3”). Vale para as próximas importações.</p>
+      <ul id="regras" class="regras"></ul>
+    </details>
+  </aside>
+</main>
+
+<dialog id="dlg-importar">
+  <form method="dialog">
+    <h3>Importar lançamentos</h3>
+    <p id="dlg-texto"></p>
+    <div class="dlg-acoes">
+      <button class="btn" value="cancelar">Cancelar</button>
+      <button class="btn perigo" value="sobrescrever">Sobrescrever</button>
+      <button class="btn primario" value="adicionar">Adicionar como novos</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

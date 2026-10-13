@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ferramentas</title>
+<style>
+  :root {
+    --bg: #eef1f4;
+    --superficie: #ffffff;
+    --tinta: #1d2733;
+    --tinta-suave: #5b6876;
+    --linha: #d5dbe2;
+    --destaque: #1f5fa8;
+    --pasta: #b57614;
+    --foco: #1f5fa8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151a20;
+      --superficie: #1e252d;
+      --tinta: #e6ebf0;
+      --tinta-suave: #9aa7b5;
+      --linha: #313b46;
+      --destaque: #6aa7ea;
+      --pasta: #e0a850;
+      --foco: #6aa7ea;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--tinta);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 40px 20px 64px; }
+
+  #trilha { font-size: 14px; color: var(--tinta-suave); min-height: 21px; }
+  #trilha ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; }
+  #trilha li + li::before { content: "/"; margin-right: 8px; color: var(--linha); }
+  #trilha a { color: var(--destaque); text-decoration: none; }
+  #trilha a:hover { text-decoration: underline; }
+  #trilha [aria-current] { color: var(--tinta); }
+
+  h1 { font-size: 30px; line-height: 1.2; margin: 8px 0 24px; letter-spacing: -0.01em; }
+
+  #lista { list-style: none; margin: 0; padding: 0; background: var(--superficie); border: 1px solid var(--linha); border-radius: 10px; overflow: hidden; }
+  #lista li + li { border-top: 1px solid var(--linha); }
+  #lista a {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px; color: inherit; text-decoration: none;
+  }
+  #lista a:hover { background: color-mix(in srgb, var(--destaque) 8%, transparent); }
+  #lista svg { flex: none; width: 22px; height: 22px; }
+  .pasta svg:first-child { color: var(--pasta); }
+  .ferramenta svg:first-child { color: var(--destaque); }
+  .texto { flex: 1; min-width: 0; }
+  .nome { font-weight: 600; }
+  .descricao { display: block; font-size: 14px; color: var(--tinta-suave); }
+  .seta { color: var(--tinta-suave); width: 18px !important; height: 18px !important; }
+
+  .vazio { padding: 28px 16px; text-align: center; color: var(--tinta-suave); }
+
+  a:focus-visible { outline: 3px solid var(--foco); outline-offset: -3px; }
+</style>
+</head>
+<body>
+<main>
+  <nav id="trilha" aria-label="Caminho"></nav>
+  <h1 id="titulo"></h1>
+  <ul id="lista"></ul>
+</main>
+
+<script>
+/*
+  ============================================================
+  EDITE AQUI
+  ------------------------------------------------------------
+  Ferramenta:  { nome: "Nome", href: "pasta/index.html" }
+  Diretório:   { nome: "Nome", itens: [ ...mais itens... ] }
+  Opcional em qualquer item: descricao: "texto curto"
+
+  Os caminhos em href são relativos a este arquivo (sem "/" no
+  começo), assim funcionam também em github.io/nome-do-repo/.
+  Diretórios podem ter diretórios dentro, em qualquer nível.
+  ============================================================
+*/
+const MENU = [
+  {
+    nome: "Escola Irmã Dulce",
+    itens: [
+      { nome: "Formatar ATA para Historico", href: "escola-irma-dulce/ata-historico/index.html" },
+      { nome: "Listar Materias EJA", href: "escola-irma-dulce/materias-eja/index.html" },
+      { nome: "Unificar ATA 1º e 2º ano", href: "escola-irma-dulce/unificar-ata/index.html" },
+    ]
+  },
+  { nome: "Gerenciador Financeiro Nubank", href: "financas-nubank/index.html" },
+  { nome: "X-Mouse Button - code formatter", href: "xmouse-formatter/index.html" },
+];
+
+/* ---------------- código da listagem ---------------- */
+
+const TITULO_RAIZ = "Ferramentas";
+
+const slug = (txt) => txt
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+const ehDiretorio = (item) => Array.isArray(item.itens);
+
+const ICONES = {
+  pasta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.5h8.8A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>',
+  ferramenta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M7 6.5h.01M10 6.5h.01"/></svg>',
+  seta: '<svg class="seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>'
+};
+
+/* Lê o hash (#/escola-irma-dulce/...) e desce na árvore. */
+function resolverCaminho() {
+  const partes = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+  const trilha = [];
+  let itens = MENU;
+  let prefixo = "";
+
+  for (const parte of partes) {
+    const achado = itens.find((i) => ehDiretorio(i) && slug(i.nome) === parte);
+    if (!achado) break;
+    prefixo += "/" + parte;
+    trilha.push({ nome: achado.nome, hash: "#" + prefixo });
+    itens = achado.itens;
+  }
+  return { trilha, itens, prefixo };
+}
+
+function desenhar() {
+  const { trilha, itens, prefixo } = resolverCaminho();
+
+  /* trilha de navegação */
+  const nav = document.getElementById("trilha");
+  nav.replaceChildren();
+  if (trilha.length) {
+    const ol = document.createElement("ol");
+    const todos = [{ nome: TITULO_RAIZ, hash: "#/" }, ...trilha];
+    todos.forEach((passo, i) => {
+      const li = document.createElement("li");
+      if (i === todos.length - 1) {
+        li.textContent = passo.nome;
+        li.setAttribute("aria-current", "page");
+      } else {
+        const a = document.createElement("a");
+        a.href = passo.hash;
+        a.textContent = passo.nome;
+        li.appendChild(a);
+      }
+      ol.appendChild(li);
+    });
+    nav.appendChild(ol);
+  }
+
+  /* título */
+  const titulo = trilha.length ? trilha[trilha.length - 1].nome : TITULO_RAIZ;
+  document.getElementById("titulo").textContent = titulo;
+  document.title = trilha.length ? titulo + " · " + TITULO_RAIZ : TITULO_RAIZ;
+
+  /* itens */
+  const lista = document.getElementById("lista");
+  lista.replaceChildren();
+
+  if (!itens.length) {
+    const li = document.createElement("li");
+    li.className = "vazio";
+    li.textContent = "Este diretório ainda não tem ferramentas.";
+    lista.appendChild(li);
+    return;
+  }
+
+  for (const item of itens) {
+    const dir = ehDiretorio(item);
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.className = dir ? "pasta" : "ferramenta";
+    a.href = dir ? "#" + prefixo + "/" + slug(item.nome) : item.href;
+
+    const texto = document.createElement("span");
+    texto.className = "texto";
+    const nome = document.createElement("span");
+    nome.className = "nome";
+    nome.textContent = item.nome;
+    texto.appendChild(nome);
+    if (item.descricao) {
+      const d = document.createElement("span");
+      d.className = "descricao";
+      d.textContent = item.descricao;
+      texto.appendChild(d);
+    }
+
+    a.insertAdjacentHTML("afterbegin", dir ? ICONES.pasta : ICONES.ferramenta);
+    a.appendChild(texto);
+    if (dir) a.insertAdjacentHTML("beforeend", ICONES.seta);
+
+    li.appendChild(a);
+    lista.appendChild(li);
+  }
+}
+
+window.addEventListener("hashchange", () => { desenhar(); window.scrollTo(0, 0); });
+desenhar();
+</script>
+</body>
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unificar PDFs (1 ANO + 2 ANO)</title>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<style>
+  :root{
+    --bg:#f7f7fb; --card:#ffffff; --text:#1c1c22; --muted:#6b6b76;
+    --accent:#6d5ef0; --accent-dark:#5645d6; --border:#e3e3ec; --ok:#1a8f5e; --warn:#c9860a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#131318; --card:#1c1c24; --text:#f1f1f5; --muted:#9a9aa6;
+      --accent:#8a7bff; --accent-dark:#a294ff; --border:#2e2e3a; --ok:#3ddc97; --warn:#e0a733;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#131318; --card:#1c1c24; --text:#f1f1f5; --muted:#9a9aa6;
+    --accent:#8a7bff; --accent-dark:#a294ff; --border:#2e2e3a; --ok:#3ddc97; --warn:#e0a733;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex; justify-content:center; padding:40px 16px;
+  }
+  .wrap{width:100%; max-width:680px;}
+  h1{font-size:1.4rem; margin-bottom:4px;}
+  p.sub{color:var(--muted); margin-top:0; margin-bottom:28px; font-size:0.95rem;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:24px; margin-bottom:20px;
+  }
+  .drop{
+    display:block; width:100%;
+    border:2px dashed var(--border); border-radius:12px; padding:32px 20px;
+    text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+    position:relative;
+  }
+  .drop.filled{border-color:var(--ok); background:rgba(26,143,94,0.06);}
+  .drop:hover{border-color:var(--accent);}
+  .drop input{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .drop .label{font-weight:600; margin-bottom:4px;}
+  .drop .hint{color:var(--muted); font-size:0.85rem;}
+  .drop .count{color:var(--ok); font-size:0.88rem; margin-top:6px; font-weight:600;}
+  button{
+    width:100%; padding:13px; border:none; border-radius:10px;
+    background:var(--accent); color:#fff; font-size:1rem; font-weight:600;
+    cursor:pointer; margin-top:18px; transition:background .15s, opacity .15s;
+  }
+  button:hover:not(:disabled){background:var(--accent-dark);}
+  button:disabled{opacity:0.45; cursor:not-allowed;}
+  .status{margin-top:14px; font-size:0.9rem; min-height:20px;}
+  .status.ok{color:var(--ok);}
+  .status.err{color:#e5484d;}
+  .status.warn{color:var(--warn);}
+  .groups{margin-top:18px;}
+  .group{
+    border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+    margin-bottom:10px; font-size:0.9rem;
+  }
+  .group.incomplete{border-color:var(--warn);}
+  .group .gname{font-weight:600; margin-bottom:6px;}
+  .group .files{color:var(--muted); font-size:0.85rem; line-height:1.5;}
+  .group .warn-msg{color:var(--warn); font-size:0.82rem; margin-top:4px;}
+  .result{
+    margin-top:8px; display:flex; align-items:center; justify-content:space-between;
+    background:rgba(109,94,240,0.08); border-radius:10px; padding:10px 14px;
+    font-size:0.88rem;
+  }
+  .result a{color:var(--accent); font-weight:600; text-decoration:none;}
+  .result a:hover{text-decoration:underline;}
+  .resultsHeader{
+    display:flex; align-items:center; justify-content:space-between; margin-top:20px;
+  }
+  .resultsHeader strong{font-size:0.95rem;}
+  .clear-btn{
+    background:transparent; color:var(--muted); border:1px solid var(--border);
+    font-weight:500; font-size:0.82rem; padding:6px 10px; width:auto; margin:0;
+  }
+  .clear-btn:hover{background:rgba(255,255,255,0.04); color:var(--text);}
+  footer{color:var(--muted); font-size:0.8rem; text-align:center; margin-top:28px;}
+  code{background:rgba(109,94,240,0.1); padding:1px 5px; border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔗 Unificar PDFs por nome</h1>
+  <p class="sub">Selecione todos os PDFs de uma vez (ex: <code>JOAO - 1 ANO.pdf</code>, <code>JOAO - 2 ANO.pdf</code>, <code>MARIA - 1 ANO.pdf</code>...). O sistema agrupa por nome, ordena "1 ANO" antes de "2 ANO" e gera um PDF unificado por pessoa.</p>
+
+  <div class="card">
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" accept="application/pdf" multiple>
+      <div class="label">📄 Selecione ou arraste vários PDFs</div>
+      <div class="hint">Todos os arquivos "1 ANO" e "2 ANO" de uma vez</div>
+      <div class="count" id="count"></div>
+    </label>
+
+    <div class="groups" id="groups"></div>
+
+    <button id="mergeBtn" disabled>Unificar todos</button>
+    <div class="status" id="status"></div>
+
+    <div class="resultsHeader" id="resultsHeader" style="display:none;">
+      <strong>Resultados</strong>
+      <button class="clear-btn" id="clearResults">Limpar</button>
+    </div>
+    <div id="resultsList"></div>
+  </div>
+
+  <footer>Tudo acontece no seu navegador — nenhum arquivo é enviado a servidor algum.</footer>
+</div>
+
+<script>
+const { PDFDocument } = PDFLib;
+const el = id => document.getElementById(id);
+const dropEl = el('drop');
+const fileInput = el('fileInput');
+const countEl = el('count');
+const groupsEl = el('groups');
+const mergeBtn = el('mergeBtn');
+const statusEl = el('status');
+const resultsHeader = el('resultsHeader');
+const resultsList = el('resultsList');
+const clearResultsBtn = el('clearResults');
+
+let groups = {}; // nome -> { file1ano: File|null, file2ano: File|null, outros: File[] }
+
+// Extrai {NOME} e o "ano" (1 ou 2) do nome do arquivo
+function parseFilename(filename) {
+  const base = filename.replace(/\.pdf$/i, '');
+  const match = base.match(/^(.*?)\s*-\s*([12])\s*ANO\s*$/i);
+  if (match) {
+    return { nome: match[1].trim(), ano: match[2] };
+  }
+  return { nome: base.trim(), ano: null };
+}
+
+function buildGroups(files) {
+  groups = {};
+  files.forEach(file => {
+    const { nome, ano } = parseFilename(file.name);
+    if (!groups[nome]) groups[nome] = { 1: null, 2: null, outros: [] };
+    if (ano === '1') groups[nome][1] = file;
+    else if (ano === '2') groups[nome][2] = file;
+    else groups[nome].outros.push(file);
+  });
+}
+
+function renderGroups() {
+  const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  if (names.length === 0) {
+    groupsEl.innerHTML = '';
+    mergeBtn.disabled = true;
+    return;
+  }
+
+  let html = '';
+  let anyComplete = false;
+
+  names.forEach(nome => {
+    const g = groups[nome];
+    const parts = [];
+    if (g[1]) parts.push(`1 ANO: ${g[1].name}`);
+    if (g[2]) parts.push(`2 ANO: ${g[2].name}`);
+    g.outros.forEach(f => parts.push(`sem padrão: ${f.name}`));
+
+    const totalPdfs = (g[1] ? 1 : 0) + (g[2] ? 1 : 0) + g.outros.length;
+    const complete = totalPdfs >= 2;
+    if (complete) anyComplete = true;
+
+    html += `
+      <div class="group ${complete ? '' : 'incomplete'}">
+        <div class="gname">${nome} ${complete ? '✅' : ''}</div>
+        <div class="files">${parts.join('<br>')}</div>
+        ${complete ? '' : '<div class="warn-msg">⚠️ Só encontrei 1 arquivo — precisa de pelo menos 2 para unificar.</div>'}
+      </div>
+    `;
+  });
+
+  groupsEl.innerHTML = html;
+  mergeBtn.disabled = !anyComplete;
+}
+
+fileInput.addEventListener('change', e => {
+  const files = Array.from(e.target.files).filter(f =>
+    f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+  );
+  countEl.textContent = files.length ? `${files.length} arquivo(s) selecionado(s)` : '';
+  dropEl.classList.toggle('filled', files.length > 0);
+  buildGroups(files);
+  renderGroups();
+  setStatus('');
+  resultsHeader.style.display = 'none';
+  resultsList.innerHTML = '';
+});
+
+['dragover', 'dragenter'].forEach(evt =>
+  dropEl.addEventListener(evt, e => { e.preventDefault(); dropEl.style.borderColor = 'var(--accent)'; })
+);
+['dragleave', 'drop'].forEach(evt =>
+  dropEl.addEventListener(evt, e => { e.preventDefault(); dropEl.style.borderColor = ''; })
+);
+dropEl.addEventListener('drop', e => {
+  e.preventDefault();
+  const files = Array.from(e.dataTransfer.files).filter(f =>
+    f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+  );
+  // Simula seleção no input para manter consistência
+  const dt = new DataTransfer();
+  files.forEach(f => dt.items.add(f));
+  fileInput.files = dt.files;
+  fileInput.dispatchEvent(new Event('change'));
+});
+
+function setStatus(msg, type) {
+  statusEl.textContent = msg;
+  statusEl.className = 'status' + (type ? ' ' + type : '');
+}
+
+mergeBtn.addEventListener('click', async () => {
+  mergeBtn.disabled = true;
+  setStatus('Unificando...', '');
+  resultsList.innerHTML = '';
+  resultsHeader.style.display = 'none';
+
+  const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  let successCount = 0;
+  let skipCount = 0;
+
+  for (const nome of names) {
+    const g = groups[nome];
+    // Ordem: 1 ANO, depois 2 ANO, depois quaisquer "outros" (ordem alfabética do nome do arquivo)
+    const ordered = [];
+    if (g[1]) ordered.push(g[1]);
+    if (g[2]) ordered.push(g[2]);
+    g.outros.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).forEach(f => ordered.push(f));
+
+    if (ordered.length < 2) { skipCount++; continue; }
+
+    try {
+      const merged = await PDFDocument.create();
+      for (const file of ordered) {
+        const buf = await file.arrayBuffer();
+        const doc = await PDFDocument.load(buf);
+        const pages = await merged.copyPages(doc, doc.getPageIndices());
+        pages.forEach(p => merged.addPage(p));
+      }
+      const mergedBytes = await merged.save();
+      const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const outName = nome + '.pdf';
+
+      addResult(outName, url);
+      successCount++;
+    } catch (err) {
+      console.error('Erro ao unificar', nome, err);
+      addResult(nome + ' — ERRO: ' + err.message, null);
+    }
+  }
+
+  resultsHeader.style.display = names.length ? 'flex' : 'none';
+
+  if (successCount > 0 && skipCount === 0) {
+    setStatus(`✅ ${successCount} PDF(s) unificado(s) com sucesso!`, 'ok');
+  } else if (successCount > 0 && skipCount > 0) {
+    setStatus(`✅ ${successCount} unificado(s). ⚠️ ${skipCount} ignorado(s) por ter só 1 arquivo.`, 'warn');
+  } else {
+    setStatus('Nenhum grupo tinha 2 ou mais arquivos para unificar.', 'err');
+  }
+
+  mergeBtn.disabled = false;
+});
+
+function addResult(name, url) {
+  const div = document.createElement('div');
+  div.className = 'result';
+  if (url) {
+    div.innerHTML = `<span>📎 ${name}</span><a href="${url}" download="${name}">Baixar</a>`;
+  } else {
+    div.innerHTML = `<span style="color:#e5484d;">❌ ${name}</span>`;
+  }
+  resultsList.appendChild(div);
+}
+
+clearResultsBtn.addEventListener('click', () => {
+  resultsList.innerHTML = '';
+  resultsHeader.style.display = 'none';
+});
+</script>
+</body>
+</html>

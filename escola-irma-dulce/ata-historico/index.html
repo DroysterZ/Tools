@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ferramenta de Histórico Escolar</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#ffffff; --border:#dbe1e8; --text:#1f2933;
+    --muted:#64748b; --primary:#2563eb; --primary-dark:#1d4ed8;
+    --danger:#dc2626; --danger-dark:#b91c1c; --ok:#16a34a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background:var(--bg); color:var(--text); margin:0; padding:24px;
+  }
+  h1{font-size:1.4rem; margin-bottom:4px;}
+  h2{font-size:1.05rem; margin:0 0 12px 0; color:#111827;}
+  .subtitle{color:var(--muted); margin-top:0; margin-bottom:24px; font-size:.9rem;}
+  .container{max-width:1000px; margin:0 auto; display:flex; flex-direction:column; gap:20px;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:18px 20px;
+  }
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  input[type=text], input[type=number], select, textarea{
+    font-family:inherit; font-size:.9rem; padding:8px 10px; border:1px solid var(--border);
+    border-radius:6px; background:#fff; color:var(--text);
+  }
+  input[type=text]:focus, select:focus, textarea:focus{outline:2px solid #93c5fd; border-color:var(--primary);}
+  button{
+    font-family:inherit; font-size:.85rem; padding:8px 14px; border-radius:6px; border:1px solid transparent;
+    cursor:pointer; font-weight:600;
+  }
+  .btn-primary{background:var(--primary); color:#fff;}
+  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-secondary{background:#eef2f7; color:var(--text); border:1px solid var(--border);}
+  .btn-secondary:hover{background:#e2e8f0;}
+  .btn-danger{background:#fef2f2; color:var(--danger); border:1px solid #fecaca;}
+  .btn-danger:hover{background:var(--danger); color:#fff;}
+  .btn-sm{padding:4px 8px; font-size:.75rem;}
+  ul.list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;}
+  ul.list li{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    background:#f8fafc; border:1px solid var(--border); border-radius:6px; padding:7px 10px;
+  }
+  .list-idx{color:var(--muted); font-size:.75rem; width:20px;}
+  .materia-name{flex:1; font-size:.88rem;}
+  .actions{display:flex; gap:4px;}
+  .materia-row{
+    display:grid; grid-template-columns:1fr 140px auto; gap:8px; align-items:center;
+    background:#f8fafc; border:1px solid var(--border); border-radius:6px; padding:8px 10px;
+    margin-bottom:6px;
+  }
+  .materia-row select, .materia-row input{width:100%;}
+  textarea{width:100%; resize:vertical; font-family: ui-monospace, monospace;}
+  #rawInput{min-height:110px;}
+  #outputText{min-height:220px; background:#f8fafc;}
+  .helper{color:var(--muted); font-size:.78rem; margin-top:4px;}
+  .divider{height:1px; background:var(--border); margin:16px 0;}
+  .empty{color:var(--muted); font-size:.85rem; font-style:italic; padding:6px 0;}
+  .badge{
+    display:inline-block; background:#eef2ff; color:#4338ca; font-size:.72rem; font-weight:700;
+    padding:2px 8px; border-radius:999px; margin-left:6px;
+  }
+  .toast{
+    position:fixed; bottom:20px; right:20px; background:#1f2933; color:#fff; padding:10px 16px;
+    border-radius:8px; font-size:.85rem; opacity:0; transform:translateY(10px);
+    transition:all .25s ease; pointer-events:none;
+  }
+  .toast.show{opacity:1; transform:translateY(0);}
+  .ref-list{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+  .ref-chip{background:#eef2f7; border:1px solid var(--border); border-radius:999px; padding:3px 10px; font-size:.75rem;}
+  label{font-size:.82rem; color:var(--muted); font-weight:600;}
+  .field-group{display:flex; flex-direction:column; gap:4px;}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div>
+    <h1>Ferramenta de Histórico Escolar</h1>
+    <p class="subtitle">Cadastre matérias, vincule turmas e converta as notas da ATA no formato do histórico.</p>
+    <button class="btn-danger btn-sm" onclick="limparTudo()">Limpar cadastro (apagar tudo)</button>
+  </div>
+
+  <!-- SEÇÃO 1: MATÉRIAS DO HISTÓRICO -->
+  <div class="card">
+    <h2>1. Modelos de Histórico Escolar</h2>
+    <p class="helper">Cada modelo tem sua própria lista de matérias, na ordem em que aparecem naquele histórico. Use um modelo por tipo de histórico (ex: "Ensino Médio", "EJA", etc).</p>
+    <div class="row" style="margin:10px 0;">
+      <div class="field-group">
+        <label>Modelo de histórico</label>
+        <select id="selectModelo" onchange="onSelectModelo()" style="min-width:200px;"></select>
+      </div>
+      <button class="btn-secondary" onclick="novoModelo()">+ Novo modelo</button>
+      <button class="btn-danger" id="btnRemoverModelo" onclick="removerModelo()">Remover modelo</button>
+    </div>
+    <p class="empty" id="modeloVazio">Nenhum modelo cadastrado. Clique em "+ Novo modelo" para começar.</p>
+
+    <div id="modeloEditorWrap" style="display:none;">
+      <div class="divider"></div>
+      <div class="row" style="margin:10px 0;">
+        <input type="text" id="novaMateriaHistorico" placeholder="Nome da matéria (ex: Educação Física)" style="flex:1; min-width:220px;">
+        <button class="btn-primary" onclick="addMateriaHistorico()">Adicionar</button>
+      </div>
+      <ul class="list" id="listaHistorico"></ul>
+      <p class="empty" id="historicoVazio" style="display:none;">Nenhuma matéria cadastrada neste modelo ainda.</p>
+    </div>
+  </div>
+
+  <!-- SEÇÃO 2: TURMAS -->
+  <div class="card">
+    <h2>2. Turmas e Matérias Vinculadas</h2>
+    <p class="helper">Selecione uma turma para ver/editar as matérias e cargas horárias já vinculadas a ela, ou crie uma nova turma.</p>
+    <div class="row" style="margin:10px 0;">
+      <div class="field-group">
+        <label>Turma</label>
+        <select id="selectTurma" onchange="onSelectTurma()" style="min-width:200px;"></select>
+      </div>
+      <button class="btn-secondary" onclick="novaTurma()">+ Nova turma</button>
+      <button class="btn-danger" id="btnRemoverTurma" onclick="removerTurma()">Remover turma</button>
+    </div>
+
+    <div id="turmaEditorWrap" style="display:none;">
+      <div class="divider"></div>
+      <div id="turmaMateriasEditor"></div>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn-secondary" onclick="addLinhaMateriaTurma()">+ Adicionar matéria à turma</button>
+        <button class="btn-primary" onclick="salvarTurma()">Salvar turma</button>
+      </div>
+    </div>
+    <p class="empty" id="turmaVazio">Nenhuma turma cadastrada. Clique em "Nova turma" para começar.</p>
+  </div>
+
+  <!-- SEÇÃO 3: PROCESSAR ALUNO -->
+  <div class="card">
+    <h2>3. Processar dados do aluno (ATA → Histórico)</h2>
+    <div class="row" style="margin-bottom:10px;">
+      <div class="field-group">
+        <label>Modelo de histórico</label>
+        <select id="selectModeloProcesso" onchange="onSelectModeloProcesso()" style="min-width:200px;"></select>
+      </div>
+      <div class="field-group">
+        <label>Turma do aluno</label>
+        <select id="selectTurmaProcesso" onchange="onSelectTurmaProcesso()" style="min-width:200px;"></select>
+      </div>
+    </div>
+    <div id="refMateriasTurma" class="ref-list"></div>
+
+    <div class="divider"></div>
+
+    <label for="rawInput">Cole aqui os dados do aluno (ID, nome, notas/faltas, faltas anuais, faltas justificadas, % faltas, situação)</label>
+    <textarea id="rawInput" placeholder="Cole o texto copiado da ATA aqui (pode ter quebras de linha)"></textarea>
+    <p class="helper">Quebras de linha são automaticamente substituídas por espaço antes do processamento.</p>
+
+    <div class="row" style="margin-top:10px;">
+      <button class="btn-primary" onclick="processarAluno()" id="btnProcessar" disabled>Processar</button>
+      <button class="btn-secondary" onclick="limparProcesso()">Limpar</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <label for="outputText">Saída (ordem do histórico) — NOTA [TAB] CARGA_HORÁRIA [TAB] FALTAS por linha</label>
+    <textarea id="outputText" readonly></textarea>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn-primary" onclick="copiarOutput()">Copiar para área de transferência</button>
+    </div>
+    <p class="helper" id="alunoInfo"></p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------------- ARMAZENAMENTO ---------------------- */
+const LS_MODELOS = 'histescolar_modelos_historico';
+const LS_TURMAS = 'histescolar_turmas';
+
+function loadModelos(){
+  try{ return JSON.parse(localStorage.getItem(LS_MODELOS)) || {}; }catch(e){ return {}; }
+}
+function saveModelos(obj){
+  localStorage.setItem(LS_MODELOS, JSON.stringify(obj));
+}
+function loadTurmas(){
+  try{ return JSON.parse(localStorage.getItem(LS_TURMAS)) || {}; }catch(e){ return {}; }
+}
+function saveTurmas(obj){
+  localStorage.setItem(LS_TURMAS, JSON.stringify(obj));
+}
+
+let modelos = loadModelos();          // { nomeModelo: [materia, materia, ...] }
+let modeloAtual = null;               // modelo selecionado na seção 1
+let turmas = loadTurmas();
+let turmaAtualEdicao = null;     // turma selecionada na seção 2 (rascunho em edição)
+let turmaAtualEdicaoRows = [];   // linhas em edição (não salvas ainda)
+
+/* ---------------------- TOAST ---------------------- */
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=> t.classList.remove('show'), 2000);
+}
+
+/* ---------------------- SEÇÃO 1: MODELOS DE HISTÓRICO ---------------------- */
+function renderSelectModelo(){
+  const sel = document.getElementById('selectModelo');
+  const nomes = Object.keys(modelos).sort();
+  sel.innerHTML = '<option value="">-- selecione --</option>' +
+    nomes.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  document.getElementById('modeloVazio').style.display = nomes.length ? 'none' : 'block';
+  document.getElementById('btnRemoverModelo').style.display = nomes.length ? 'inline-block' : 'none';
+}
+function novoModelo(){
+  const nome = prompt('Nome do novo modelo de histórico (ex: "Ensino Médio", "EJA"):');
+  if(!nome) return;
+  const nomeTrim = nome.trim();
+  if(!nomeTrim) return;
+  if(modelos[nomeTrim]){ toast('Esse modelo já existe.'); return; }
+  modelos[nomeTrim] = [];
+  saveModelos(modelos);
+  renderSelectModelo();
+  document.getElementById('selectModelo').value = nomeTrim;
+  onSelectModelo();
+}
+function removerModelo(){
+  const sel = document.getElementById('selectModelo');
+  const nome = sel.value;
+  if(!nome) return;
+  if(!confirm(`Remover o modelo "${nome}" e todas as suas matérias?`)) return;
+  delete modelos[nome];
+  saveModelos(modelos);
+  modeloAtual = null;
+  renderSelectModelo();
+  document.getElementById('modeloEditorWrap').style.display = 'none';
+  renderSelectModeloProcesso();
+}
+function onSelectModelo(){
+  const nome = document.getElementById('selectModelo').value;
+  const wrap = document.getElementById('modeloEditorWrap');
+  if(!nome){ wrap.style.display='none'; modeloAtual=null; return; }
+  modeloAtual = nome;
+  wrap.style.display = 'block';
+  renderHistorico();
+}
+function renderHistorico(){
+  const ul = document.getElementById('listaHistorico');
+  const empty = document.getElementById('historicoVazio');
+  const lista = modeloAtual ? (modelos[modeloAtual] || []) : [];
+  ul.innerHTML = '';
+  empty.style.display = lista.length ? 'none' : 'block';
+  lista.forEach((materia, i)=>{
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <span class="list-idx">${i+1}.</span>
+      <span class="materia-name">${escapeHtml(materia)}</span>
+      <span class="actions">
+        <button class="btn-secondary btn-sm" ${i===0?'disabled':''} onclick="moveHistorico(${i},-1)">↑</button>
+        <button class="btn-secondary btn-sm" ${i===lista.length-1?'disabled':''} onclick="moveHistorico(${i},1)">↓</button>
+        <button class="btn-danger btn-sm" onclick="removeHistorico(${i})">Remover</button>
+      </span>`;
+    ul.appendChild(li);
+  });
+  renderProcessTurmaMateriasRef();
+}
+function addMateriaHistorico(){
+  if(!modeloAtual){ toast('Selecione ou crie um modelo primeiro.'); return; }
+  const input = document.getElementById('novaMateriaHistorico');
+  const val = input.value.trim();
+  if(!val){ toast('Digite um nome de matéria.'); return; }
+  modelos[modeloAtual].push(val);
+  saveModelos(modelos);
+  input.value = '';
+  renderHistorico();
+}
+function moveHistorico(i, dir){
+  const lista = modelos[modeloAtual];
+  const j = i + dir;
+  if(j < 0 || j >= lista.length) return;
+  [lista[i], lista[j]] = [lista[j], lista[i]];
+  saveModelos(modelos);
+  renderHistorico();
+}
+function removeHistorico(i){
+  const lista = modelos[modeloAtual];
+  if(!confirm(`Remover "${lista[i]}" do modelo "${modeloAtual}"?`)) return;
+  lista.splice(i,1);
+  saveModelos(modelos);
+  renderHistorico();
+}
+function todasAsMaterias(){
+  // união (sem duplicar) de todas as matérias cadastradas em todos os modelos, para sugestão na seção de turmas
+  const set = new Set();
+  Object.values(modelos).forEach(lista => lista.forEach(m => set.add(m)));
+  return Array.from(set).sort();
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------------------- SEÇÃO 2: TURMAS ---------------------- */
+function renderSelectTurma(){
+  const sel = document.getElementById('selectTurma');
+  const nomes = Object.keys(turmas).sort();
+  sel.innerHTML = '<option value="">-- selecione --</option>' +
+    nomes.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  document.getElementById('turmaVazio').style.display = nomes.length ? 'none' : 'block';
+  document.getElementById('btnRemoverTurma').style.display = nomes.length ? 'inline-block' : 'none';
+}
+function novaTurma(){
+  const nome = prompt('Nome da nova turma:');
+  if(!nome) return;
+  const nomeTrim = nome.trim();
+  if(!nomeTrim) return;
+  if(turmas[nomeTrim]){ toast('Essa turma já existe.'); return; }
+  turmas[nomeTrim] = [];
+  saveTurmas(turmas);
+  renderSelectTurma();
+  document.getElementById('selectTurma').value = nomeTrim;
+  onSelectTurma();
+  renderSelectTurmaProcesso();
+}
+function removerTurma(){
+  const sel = document.getElementById('selectTurma');
+  const nome = sel.value;
+  if(!nome) return;
+  if(!confirm(`Remover a turma "${nome}" e suas matérias vinculadas?`)) return;
+  delete turmas[nome];
+  saveTurmas(turmas);
+  turmaAtualEdicao = null;
+  renderSelectTurma();
+  document.getElementById('turmaEditorWrap').style.display = 'none';
+  renderSelectTurmaProcesso();
+}
+function onSelectTurma(){
+  const nome = document.getElementById('selectTurma').value;
+  const wrap = document.getElementById('turmaEditorWrap');
+  if(!nome){ wrap.style.display='none'; turmaAtualEdicao=null; return; }
+  turmaAtualEdicao = nome;
+  // clona os dados salvos para edição
+  turmaAtualEdicaoRows = (turmas[nome] || []).map(r => ({...r}));
+  wrap.style.display = 'block';
+  renderTurmaMateriasEditor();
+}
+function renderTurmaMateriasEditor(){
+  const wrap = document.getElementById('turmaMateriasEditor');
+  wrap.innerHTML = '';
+  if(turmaAtualEdicaoRows.length === 0){
+    wrap.innerHTML = '<p class="empty">Nenhuma matéria vinculada ainda. Clique em "+ Adicionar matéria à turma".</p>';
+    return;
+  }
+  turmaAtualEdicaoRows.forEach((row, i)=>{
+    const div = document.createElement('div');
+    div.className = 'materia-row';
+    const opcoesHistorico = todasAsMaterias().map(m =>
+      `<option value="${escapeHtml(m)}" ${row.materia===m?'selected':''}>${escapeHtml(m)}</option>`
+    ).join('');
+    // permite matéria fora dos modelos cadastrados, mantendo valor customizado
+    const custom = todasAsMaterias().includes(row.materia) ? '' :
+      `<option value="${escapeHtml(row.materia||'')}" selected>${escapeHtml(row.materia||'(nova matéria)')}</option>`;
+    div.innerHTML = `
+      <select onchange="updateTurmaRow(${i}, 'materia', this.value)">
+        <option value="">-- selecione a matéria --</option>
+        ${custom}
+        ${opcoesHistorico}
+      </select>
+      <input type="text" placeholder="Carga horária"
+        value="${row.cargaHoraria ?? ''}"
+        oninput="updateTurmaRow(${i}, 'cargaHoraria', this.value)">
+      <button class="btn-danger btn-sm" onclick="removeTurmaRow(${i})">Remover</button>
+    `;
+    wrap.appendChild(div);
+  });
+}
+function addLinhaMateriaTurma(){
+  turmaAtualEdicaoRows.push({materia:'', cargaHoraria:''});
+  renderTurmaMateriasEditor();
+}
+function updateTurmaRow(i, field, value){
+  turmaAtualEdicaoRows[i][field] = field === 'cargaHoraria' ? value : value;
+}
+function removeTurmaRow(i){
+  turmaAtualEdicaoRows.splice(i,1);
+  renderTurmaMateriasEditor();
+}
+function salvarTurma(){
+  if(!turmaAtualEdicao) return;
+  // valida linhas
+  const invalida = turmaAtualEdicaoRows.some(r => !r.materia);
+  if(invalida){ toast('Selecione a matéria em todas as linhas antes de salvar.'); return; }
+  turmas[turmaAtualEdicao] = turmaAtualEdicaoRows.map(r => ({
+    materia: r.materia,
+    cargaHoraria: r.cargaHoraria ?? ''
+  }));
+  saveTurmas(turmas);
+  toast('Turma salva.');
+  renderSelectTurmaProcesso();
+}
+
+/* ---------------------- SEÇÃO 3: PROCESSAR ALUNO ---------------------- */
+function renderSelectModeloProcesso(){
+  const sel = document.getElementById('selectModeloProcesso');
+  const atual = sel.value;
+  const nomes = Object.keys(modelos).sort();
+  sel.innerHTML = '<option value="">-- selecione --</option>' +
+    nomes.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  if(nomes.includes(atual)) sel.value = atual;
+  onSelectModeloProcesso();
+}
+function onSelectModeloProcesso(){
+  const nome = document.getElementById('selectModeloProcesso').value;
+  document.getElementById('btnProcessar').disabled = !nome || !document.getElementById('selectTurmaProcesso').value;
+}
+function renderSelectTurmaProcesso(){
+  const sel = document.getElementById('selectTurmaProcesso');
+  const atual = sel.value;
+  const nomes = Object.keys(turmas).sort();
+  sel.innerHTML = '<option value="">-- selecione --</option>' +
+    nomes.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  if(nomes.includes(atual)) sel.value = atual;
+  onSelectTurmaProcesso();
+}
+function onSelectTurmaProcesso(){
+  renderProcessTurmaMateriasRef();
+  const nomeTurma = document.getElementById('selectTurmaProcesso').value;
+  const nomeModelo = document.getElementById('selectModeloProcesso').value;
+  document.getElementById('btnProcessar').disabled = !nomeTurma || !nomeModelo;
+}
+function renderProcessTurmaMateriasRef(){
+  const nome = document.getElementById('selectTurmaProcesso') ? document.getElementById('selectTurmaProcesso').value : '';
+  const wrap = document.getElementById('refMateriasTurma');
+  if(!wrap) return;
+  if(!nome){ wrap.innerHTML=''; return; }
+  const rows = turmas[nome] || [];
+  if(rows.length === 0){
+    wrap.innerHTML = '<span class="empty">Esta turma ainda não tem matérias vinculadas.</span>';
+    return;
+  }
+  wrap.innerHTML = rows.map((r,i) =>
+    `<span class="ref-chip">${i+1}. ${escapeHtml(r.materia)} <span class="badge">${r.cargaHoraria || 0}h</span></span>`
+  ).join('');
+}
+
+/* ---------- PARSING DO INPUT DA ATA ---------- */
+function isNumericToken(tok){
+  // aceita inteiros e decimais com vírgula ou ponto, com ou sem "%"
+  return /^\d+([.,]\d+)?%?$/.test(tok);
+}
+
+function parseAlunoInput(rawText, materiasTurma){
+  let texto = rawText.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+  if(!texto) throw new Error('Cole os dados do aluno antes de processar.');
+
+  // 1. remover a situação (palavra(s) de texto no final) e o sinal de %
+  let situacao = '';
+  const situacaoMatch = texto.match(/\s([A-Za-zÀ-ÿ]+(?:\s[A-Za-zÀ-ÿ]+)*)\s*$/);
+  if(situacaoMatch){
+    situacao = situacaoMatch[1];
+    texto = texto.slice(0, situacaoMatch.index).trim();
+  }
+  texto = texto.replace(/%/g, '');
+
+  const tokens = texto.split(' ').filter(t => t.length);
+  if(tokens.length < 2) throw new Error('Não foi possível interpretar o texto colado.');
+
+  let cursor = 0;
+  const id = tokens[cursor++];
+
+  // 2. nome: consome tokens compostos só por letras (com acentos) até achar a última letra do nome,
+  // ou seja, até achar o primeiro token numérico
+  const nameParts = [];
+  while(cursor < tokens.length && !isNumericToken(tokens[cursor])){
+    nameParts.push(tokens[cursor]);
+    cursor++;
+  }
+  if(nameParts.length === 0) throw new Error('Não foi possível identificar o nome do aluno.');
+  const nome = nameParts.join(' ');
+
+  // 3. array com o que restou depois do nome (notas, faltas, faltas gerais)
+  const resto = tokens.slice(cursor);
+
+  // 4. remove as 3 últimas posições, referentes às faltas gerais
+  if(resto.length < 3) throw new Error('Dados insuficientes no texto colado (faltas anuais / justificadas / percentual).');
+  const faltasGerais = resto.slice(resto.length - 3);
+  const pares = resto.slice(0, resto.length - 3);
+
+  const faltasAnuais = faltasGerais[0] || '';
+  const faltasJustificadas = faltasGerais[1] || '';
+  const porcentagemFaltas = faltasGerais[2] || '';
+
+  // posições pares (0,2,4...) = notas | posições ímpares (1,3,5...) = faltas de cada matéria, na ordem da turma
+  const esperado = materiasTurma.length * 2;
+  let aviso = '';
+  if(pares.length !== esperado){
+    aviso = ` (atenção: esperava ${esperado} valores de notas/faltas para ${materiasTurma.length} matéria(s), mas encontrei ${pares.length})`;
+  }
+
+  const dadosPorMateria = {};
+  materiasTurma.forEach((m, idx) => {
+    const nota = pares[idx * 2] !== undefined ? pares[idx * 2] : '';
+    const faltas = pares[idx * 2 + 1] !== undefined ? pares[idx * 2 + 1] : '';
+    dadosPorMateria[normalizeName(m.materia)] = { nota, faltas };
+  });
+
+  return { id, nome, dadosPorMateria, faltasAnuais, faltasJustificadas, porcentagemFaltas, situacao, aviso };
+}
+function normalizeName(s){
+  return String(s).trim().toLowerCase();
+}
+
+function processarAluno(){
+  const nomeTurma = document.getElementById('selectTurmaProcesso').value;
+  const nomeModelo = document.getElementById('selectModeloProcesso').value;
+  if(!nomeModelo){ toast('Selecione o modelo de histórico.'); return; }
+  if(!nomeTurma){ toast('Selecione a turma do aluno.'); return; }
+  const materiasTurma = turmas[nomeTurma] || [];
+  if(materiasTurma.length === 0){ toast('Essa turma não tem matérias vinculadas.'); return; }
+  const materiasModelo = modelos[nomeModelo] || [];
+  if(materiasModelo.length === 0){ toast('Esse modelo de histórico não tem matérias cadastradas (seção 1).'); return; }
+
+  const raw = document.getElementById('rawInput').value;
+  let dados;
+  try{
+    dados = parseAlunoInput(raw, materiasTurma);
+  }catch(err){
+    toast(err.message);
+    return;
+  }
+
+  // mapa matéria(normalizada) -> cargaHoraria da turma
+  const cargaPorMateria = {};
+  materiasTurma.forEach(r => { cargaPorMateria[normalizeName(r.materia)] = r.cargaHoraria; });
+
+  const linhas = materiasModelo.map(materiaHist => {
+    const key = normalizeName(materiaHist);
+    const info = dados.dadosPorMateria[key];
+    if(!info){
+      return '\t\t'; // matéria do modelo ausente na turma: linha em branco
+    }
+    const carga = cargaPorMateria[key];
+    return `${info.nota}\t${carga !== undefined && carga !== '' ? carga : ''}\t${info.faltas}`;
+  });
+
+  document.getElementById('outputText').value = linhas.join('\n');
+  document.getElementById('alunoInfo').textContent =
+    `ID: ${dados.id} | Nome: ${dados.nome} | Faltas anuais: ${dados.faltasAnuais} | ` +
+    `Faltas justificadas: ${dados.faltasJustificadas} | % faltas: ${dados.porcentagemFaltas} | Situação: ${dados.situacao}${dados.aviso || ''}`;
+}
+
+function limparProcesso(){
+  document.getElementById('rawInput').value = '';
+  document.getElementById('outputText').value = '';
+  document.getElementById('alunoInfo').textContent = '';
+}
+function copiarOutput(){
+  const ta = document.getElementById('outputText');
+  if(!ta.value){ toast('Nada para copiar ainda.'); return; }
+  ta.select();
+  ta.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(ta.value).then(()=>{
+    toast('Copiado! Agora é só colar na planilha.');
+  }).catch(()=>{
+    document.execCommand('copy');
+    toast('Copiado!');
+  });
+}
+
+/* ---------------------- LIMPAR TUDO ---------------------- */
+function limparTudo(){
+  if(!confirm('Isso vai apagar TODOS os modelos de histórico e TODAS as turmas cadastradas (armazenamento local deste navegador). Deseja continuar?')) return;
+  localStorage.removeItem(LS_MODELOS);
+  localStorage.removeItem(LS_TURMAS);
+  modelos = {};
+  modeloAtual = null;
+  turmas = {};
+  turmaAtualEdicao = null;
+  turmaAtualEdicaoRows = [];
+  renderSelectModelo();
+  document.getElementById('modeloEditorWrap').style.display = 'none';
+  renderSelectTurma();
+  document.getElementById('turmaEditorWrap').style.display = 'none';
+  renderSelectModeloProcesso();
+  renderSelectTurmaProcesso();
+  limparProcesso();
+  toast('Cadastro apagado. Pronto para começar de novo.');
+}
+
+/* ---------------------- INIT ---------------------- */
+renderSelectModelo();
+renderSelectTurma();
+renderSelectModeloProcesso();
+renderSelectTurmaProcesso();
+</script>
+</body>
+</html>
