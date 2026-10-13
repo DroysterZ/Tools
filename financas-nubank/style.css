@@ -62,7 +62,11 @@ tr.credito input.valor{color:var(--credito)}
 .regras-box{margin-top:14px;padding-top:12px;border-top:1px solid var(--linha)}
 .regras-box summary{cursor:pointer;font-weight:600}
 .regras{list-style:none;margin:8px 0 0;padding:0}
-.regras li{display:flex;align-items:center;gap:6px;padding:2px 0;font-size:.9rem}
+.regras li{display:flex;align-items:center;gap:6px;padding:2px 0;border-top:2px solid transparent;border-bottom:2px solid transparent;font-size:.9rem}
+.regras li.arrastando{opacity:.4}
+.regras li.alvo-antes{border-top-color:var(--acento)}
+.regras li.alvo-depois{border-bottom-color:var(--acento)}
+.alca{flex:none;cursor:grab;color:var(--suave);user-select:none;padding:0 2px;letter-spacing:-2px}
 .regras input,.regras select{min-width:0;font:inherit;color:inherit;padding:6px 8px;border:1px solid transparent;border-radius:5px;background:transparent}
 .regras input{flex:1}
 .regras select{width:118px;border-left:4px solid var(--c,#999);border-radius:2px 5px 5px 2px}

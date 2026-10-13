@@ -25,12 +25,13 @@ function carregar() {
   try {
     const s = JSON.parse(localStorage.getItem(CHAVE));
     if (s && Array.isArray(s.lancamentos) && Array.isArray(s.categorias)) {
-      s.regras = s.regras || {}; // dados salvos antes das regras personalizadas
+      // formato antigo: objeto { chave: {titulo, categoria} }; agora é uma lista ordenada
+      s.regras = Array.isArray(s.regras) ? s.regras : Object.values(s.regras || {});
       return s;
     }
   } catch (e) { /* dados corrompidos: começa do zero */ }
-  // regras: { "titulo em minúsculas": { titulo, categoria } }
-  return { lancamentos: [], categorias: [...CATEGORIAS_PADRAO], regras: {} };
+  // regras: [{ titulo, categoria }], da maior para a menor prioridade
+  return { lancamentos: [], categorias: [...CATEGORIAS_PADRAO], regras: [] };
 }
 
 function salvar() {
@@ -84,14 +85,11 @@ function lerCSV(txt) {
 
 const chaveRegra = titulo => titulo.trim().toLowerCase();
 
-// A regra vale se o texto dela aparece em qualquer parte do título; a de texto mais longo vence.
+// Vale a primeira regra da lista (de cima para baixo) cujo texto aparece em qualquer parte do título.
+// É o mesmo que aplicar a lista de baixo para cima, deixando as de cima sobrescreverem.
 function regraSalva(titulo) {
   const t = titulo.toLowerCase();
-  let melhor = null;
-  for (const [k, r] of Object.entries(estado.regras)) {
-    if (k && t.includes(k) && (!melhor || k.length > melhor.k.length)) melhor = { k, r };
-  }
-  return melhor && melhor.r;
+  return estado.regras.find(r => { const k = chaveRegra(r.titulo); return k && t.includes(k); });
 }
 
 function sugerir(titulo, valor) {
@@ -157,7 +155,9 @@ function mudarCategoria(l, cat) {
     : `Usar "${cat}" para "${l.titulo}" nas próximas importações?`;
   if (confirm(pergunta)) {
     iguais.forEach(x => { x.categoria = cat; });
-    estado.regras[chaveRegra(l.titulo)] = { titulo: l.titulo, categoria: cat }; // cria ou atualiza a regra
+    const existente = estado.regras.find(r => chaveRegra(r.titulo) === chaveRegra(l.titulo));
+    if (existente) existente.categoria = cat; // atualiza a regra que já existe
+    else estado.regras.unshift({ titulo: l.titulo, categoria: cat }); // regra nova entra no topo (maior prioridade)
     salvar();
     render();
     return;
@@ -279,32 +279,61 @@ function renderGraficos() {
   $('contagem').textContent = `${lista.length} lançamento(s) · ${brl(soma)}`;
 }
 
+let regraArrastada = null;
+
 function renderRegras() {
-  const regras = Object.entries(estado.regras).sort((a, b) => a[1].titulo.localeCompare(b[1].titulo, 'pt-BR'));
-  $('regras-resumo').textContent = `Regras salvas (${regras.length})`;
-  $('regras').replaceChildren(...(regras.length ? regras.map(([chaveInicial, r]) => {
-    let k = chaveInicial; // chave atual desta regra (muda se o texto for editado)
+  $('regras-resumo').textContent = `Regras salvas (${estado.regras.length})`;
+  $('regras').replaceChildren(...(estado.regras.length ? estado.regras.map(r => {
+    const alca = h('span', { className: 'alca', textContent: '⋮⋮', title: 'Arraste para mudar a prioridade' });
     const texto = h('input', {
       type: 'text', value: r.titulo, ariaLabel: 'Texto da regra',
       onchange: e => { // salva ao sair do campo
         const novo = e.target.value.trim();
         const nk = chaveRegra(novo);
         if (!nk) { e.target.value = r.titulo; return; }
-        if (nk !== k && estado.regras[nk]) { alert('Já existe uma regra com esse texto.'); e.target.value = r.titulo; return; }
-        delete estado.regras[k];
+        if (estado.regras.some(x => x !== r && chaveRegra(x.titulo) === nk)) { alert('Já existe uma regra com esse texto.'); e.target.value = r.titulo; return; }
         r.titulo = novo;
-        k = nk;
-        estado.regras[k] = r;
         salvar();
-        $('regras-resumo').textContent = `Regras salvas (${Object.keys(estado.regras).length})`;
       },
     });
     const sel = seletorCategoria(r.categoria, e => { r.categoria = e.target.value; salvar(); e.target.style.setProperty('--c', cor(r.categoria)); });
     const del = h('button', {
       className: 'icone', textContent: '×', title: 'Excluir regra', ariaLabel: 'Excluir regra',
-      onclick: () => { delete estado.regras[k]; salvar(); renderRegras(); },
+      onclick: () => { estado.regras = estado.regras.filter(x => x !== r); salvar(); renderRegras(); },
     });
-    return h('li', {}, texto, sel, del);
+    const li = h('li', {}, alca, texto, sel, del);
+
+    // Só a alça inicia o arrasto; assim ainda dá para selecionar texto nos campos.
+    alca.onmousedown = () => { li.draggable = true; };
+    alca.onmouseup = () => { li.draggable = false; };
+    li.ondragstart = e => {
+      regraArrastada = r;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', r.titulo);
+      li.classList.add('arrastando');
+    };
+    li.ondragover = e => {
+      if (!regraArrastada || regraArrastada === r) return;
+      e.preventDefault();
+      const ret = li.getBoundingClientRect();
+      const depois = e.clientY > ret.top + ret.height / 2;
+      li.classList.toggle('alvo-depois', depois);
+      li.classList.toggle('alvo-antes', !depois);
+    };
+    li.ondragleave = () => li.classList.remove('alvo-antes', 'alvo-depois');
+    li.ondrop = e => {
+      e.preventDefault();
+      if (!regraArrastada || regraArrastada === r) return;
+      const ret = li.getBoundingClientRect();
+      const depois = e.clientY > ret.top + ret.height / 2;
+      estado.regras = estado.regras.filter(x => x !== regraArrastada);
+      estado.regras.splice(estado.regras.indexOf(r) + (depois ? 1 : 0), 0, regraArrastada);
+      regraArrastada = null;
+      salvar(); // salva a nova ordem logo após soltar
+      renderRegras();
+    };
+    li.ondragend = () => { regraArrastada = null; renderRegras(); };
+    return li;
   }) : [h('li', { className: 'vazia', textContent: 'Nenhuma regra ainda. Ao mudar a categoria de um gasto, você pode salvar uma.' })]));
 }
 
@@ -328,13 +357,15 @@ function normalizar(d) {
     .filter(l => l && typeof l.data === 'string' && typeof l.titulo === 'string' && typeof l.categoria === 'string' && typeof l.valor === 'number' && isFinite(l.valor))
     .map(l => ({ id: typeof l.id === 'string' && l.id ? l.id : novoId(), data: l.data, titulo: l.titulo, valor: l.valor, categoria: l.categoria }));
   const categorias = [...new Set(d.categorias.filter(c => typeof c === 'string' && c.trim()))];
-  const regras = {};
-  Object.values(d.regras && typeof d.regras === 'object' ? d.regras : {}).forEach(r => {
-    if (r && typeof r.titulo === 'string' && typeof r.categoria === 'string' && chaveRegra(r.titulo)) {
-      regras[chaveRegra(r.titulo)] = { titulo: r.titulo.trim(), categoria: r.categoria };
+  const regras = [];
+  const lista = Array.isArray(d.regras) ? d.regras : Object.values(d.regras && typeof d.regras === 'object' ? d.regras : {});
+  lista.forEach(r => {
+    if (r && typeof r.titulo === 'string' && typeof r.categoria === 'string' && chaveRegra(r.titulo)
+        && !regras.some(x => chaveRegra(x.titulo) === chaveRegra(r.titulo))) {
+      regras.push({ titulo: r.titulo.trim(), categoria: r.categoria });
     }
   });
-  [...lancamentos, ...Object.values(regras)].forEach(x => { if (!categorias.includes(x.categoria)) categorias.push(x.categoria); });
+  [...lancamentos, ...regras].forEach(x => { if (!categorias.includes(x.categoria)) categorias.push(x.categoria); });
   return { lancamentos, categorias, regras };
 }
 
@@ -343,8 +374,8 @@ function importarJSON(txt) {
   try { pacote = JSON.parse(txt); } catch (e) { alert('Arquivo JSON inválido.'); return; }
   const novo = normalizar(pacote && pacote.dados ? pacote.dados : pacote);
   if (!novo) { alert('Esse JSON não parece ser um backup desta ferramenta.'); return; }
-  const temDados = estado.lancamentos.length || Object.keys(estado.regras).length;
-  const resumo = `${novo.lancamentos.length} lançamento(s), ${Object.keys(novo.regras).length} regra(s) e ${novo.categorias.length} categoria(s)`;
+  const temDados = estado.lancamentos.length || estado.regras.length;
+  const resumo = `${novo.lancamentos.length} lançamento(s), ${novo.regras.length} regra(s) e ${novo.categorias.length} categoria(s)`;
   if (temDados && !confirm(`Substituir TODOS os dados atuais por ${resumo} do arquivo? Os dados atuais serão perdidos.`)) return;
   estado = novo;
   filtro.texto = ''; filtro.categoria = ''; $('busca').value = '';
