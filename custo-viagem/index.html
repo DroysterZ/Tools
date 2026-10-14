@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custo estimado da viagem</title>
+<style>
+  :root {
+    --bg: #eef2f4;
+    --surface: #ffffff;
+    --ink: #1c2b33;
+    --muted: #5d6f7a;
+    --line: #cfd9de;
+    --accent: #1f6f8b;
+    --accent-ink: #ffffff;
+    --total-bg: #1c2b33;
+    --total-ink: #f3f7f9;
+    --focus: #e0a526;
+    --good: #1d7a4a;
+    --good-bg: #dff2e8;
+    --danger: #b3382c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12191d;
+      --surface: #1b262c;
+      --ink: #e8eff2;
+      --muted: #98aab4;
+      --line: #2e3d45;
+      --accent: #5bb4d1;
+      --accent-ink: #0c1317;
+      --total-bg: #e8eff2;
+      --total-ink: #12191d;
+      --good: #6fd6a0;
+      --good-bg: #1c3a2c;
+      --danger: #f08a7e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 0 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  form, .result, .saved {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  fieldset { border: 0; padding: 0; margin: 0 0 20px; }
+  legend { font-weight: 700; margin-bottom: 10px; padding: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .full { grid-column: 1 / -1; }
+  label { display: block; font-size: .92rem; color: var(--muted); margin-bottom: 4px; }
+  input, textarea, select {
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  textarea { resize: vertical; min-height: 72px; }
+  input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 1px;
+  }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+  button {
+    font: inherit;
+    padding: 10px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  button.small { padding: 6px 12px; font-size: .88rem; }
+  button.danger { color: var(--danger); }
+  .msg { margin: 12px 0 0; font-size: .92rem; min-height: 1.4em; }
+  .msg.error { color: var(--danger); }
+  .msg.ok { color: var(--good); }
+  .editing-banner {
+    display: none;
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: var(--good-bg);
+    color: var(--good);
+    font-size: .92rem;
+  }
+  .editing-banner.on { display: block; }
+
+  .result { margin-top: 20px; }
+  dl { margin: 0; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .row dt small { display: block; color: var(--muted); font-size: .82rem; }
+  .row dd { margin: 0; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .total {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 8px;
+    background: var(--total-bg);
+    color: var(--total-ink);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .total strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: .85rem; margin: 12px 0 0; }
+
+  .saved { margin-top: 20px; }
+  .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+  .empty { color: var(--muted); margin: 0; }
+  .offer { border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-top: 12px; }
+  .offer.best { border-color: var(--good); }
+  .offer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .offer-head h3 { margin: 0; font-size: 1.02rem; }
+  .offer-place { color: var(--muted); font-size: .9rem; }
+  .offer-total { text-align: right; white-space: nowrap; }
+  .offer-total strong { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+  .offer-total small { display: block; color: var(--muted); font-size: .8rem; }
+  .badge {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: var(--good-bg);
+    color: var(--good);
+    font-size: .8rem;
+    font-weight: 700;
+  }
+  .offer-meta { margin: 10px 0 0; font-size: .9rem; color: var(--muted); }
+  .offer-meta span { display: inline-block; margin-right: 14px; }
+  .offer-obs { margin: 8px 0 0; font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .offer-link { display: inline-block; margin-top: 8px; font-size: .9rem; color: var(--accent); overflow-wrap: anywhere; }
+  .offer-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+  @media (max-width: 480px) {
+    .grid, .filters { grid-template-columns: 1fr; }
+    .offer-head { flex-direction: column; }
+    .offer-total { text-align: left; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    button { transition: background-color .15s; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Custo estimado da viagem</h1>
+  <p class="sub">Calcule o custo, salve a oferta e compare com as que você já viu.</p>
+
+  <form id="form" novalidate>
+    <div class="editing-banner" id="banner">Você está editando uma oferta salva. Ao salvar, ela será atualizada.</div>
+
+    <fieldset>
+      <legend>Oferta</legend>
+      <div class="grid">
+        <div>
+          <label for="nome">Nome da oferta</label>
+          <input id="nome" type="text" maxlength="120" placeholder="Ex.: Pousada Vista Mar">
+        </div>
+        <div>
+          <label for="local">Local</label>
+          <input id="local" type="text" maxlength="120" placeholder="Ex.: Florianópolis">
+        </div>
+        <div>
+          <label for="checkin">Check-in</label>
+          <input id="checkin" type="date">
+        </div>
+        <div>
+          <label for="checkout">Check-out</label>
+          <input id="checkout" type="date">
+        </div>
+        <div class="full">
+          <label for="link">Link da oferta</label>
+          <input id="link" type="url" maxlength="2000" placeholder="https://...">
+        </div>
+        <div class="full">
+          <label for="obs">Observações adicionais</label>
+          <textarea id="obs" maxlength="1000" placeholder="Ex.: café da manhã incluso, cancelamento grátis até..."></textarea>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Hospedagem</legend>
+      <div class="grid">
+        <div class="full">
+          <label for="hospedagem">Valor total da hospedagem (R$)</label>
+          <input id="hospedagem" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Combustível</legend>
+      <div class="grid">
+        <div>
+          <label for="distancia">Distância só de ida (km)</label>
+          <input id="distancia" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
+        </div>
+        <div>
+          <label for="consumo">Consumo do carro (km/l)</label>
+          <input id="consumo" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
+        </div>
+        <div class="full">
+          <label for="preco">Preço do combustível (R$/litro)</label>
+          <input id="preco" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Alimentação</legend>
+      <div class="grid">
+        <div>
+          <label for="alimentacao">Gasto por dia (R$)</label>
+          <input id="alimentacao" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00">
+        </div>
+        <div>
+          <label for="diarias">Quantidade de diárias</label>
+          <input id="diarias" type="number" min="0" step="1" inputmode="numeric" placeholder="0">
+        </div>
+      </div>
+      <p class="hint">Ao preencher check-in e check-out, as diárias são calculadas automaticamente. Você pode ajustar o valor depois.</p>
+    </fieldset>
+
+    <div class="actions">
+      <button type="submit" class="primary" id="btn-salvar">Salvar oferta</button>
+      <button type="reset" id="btn-limpar">Limpar</button>
+    </div>
+    <p class="msg" id="msg" role="status"></p>
+  </form>
+
+  <section class="result" aria-live="polite">
+    <h2>Resultado</h2>
+    <dl>
+      <div class="row">
+        <dt>Hospedagem</dt>
+        <dd id="r-hospedagem">R$ 0,00</dd>
+      </div>
+      <div class="row">
+        <dt>Combustível <small id="r-detalhe-comb">Ida e volta: 0 km · 0 litros</small></dt>
+        <dd id="r-combustivel">R$ 0,00</dd>
+      </div>
+      <div class="row">
+        <dt>Alimentação <small id="r-detalhe-alim">0 diárias</small></dt>
+        <dd id="r-alimentacao">R$ 0,00</dd>
+      </div>
+    </dl>
+    <div class="total">
+      <span>Total estimado</span>
+      <strong id="r-total">R$ 0,00</strong>
+    </div>
+    <p class="hint">O combustível é calculado para ida e volta: (distância × 2 ÷ consumo) × preço por litro.</p>
+  </section>
+
+  <section class="saved" aria-labelledby="saved-title">
+    <h2 id="saved-title">Ofertas salvas</h2>
+    <div class="filters">
+      <div>
+        <label for="f-local">Filtrar por local</label>
+        <select id="f-local"><option value="">Todos os locais</option></select>
+      </div>
+      <div>
+        <label for="f-ordem">Ordenar por</label>
+        <select id="f-ordem">
+          <option value="total-asc">Menor custo total</option>
+          <option value="total-desc">Maior custo total</option>
+          <option value="diaria-asc">Menor custo por diária</option>
+          <option value="checkin-asc">Check-in mais próximo</option>
+          <option value="recente">Salvas recentemente</option>
+        </select>
+      </div>
+    </div>
+    <div id="lista"></div>
+  </section>
+</main>
+
+<script>
+  const STORAGE_KEY = 'ofertas-viagem-v1';
+  const $ = id => document.getElementById(id);
+  const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  const num = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
+  const numField = id => Math.max(0, parseFloat($(id).value) || 0);
+
+  let ofertas = [];
+  let editingId = null;
+  let storageOk = true;
+
+  /* ---------- Armazenamento ---------- */
+  function carregar() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const data = raw ? JSON.parse(raw) : [];
+      ofertas = Array.isArray(data) ? data : [];
+    } catch (e) {
+      ofertas = [];
+      storageOk = false;
+    }
+  }
+
+  function persistir() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(ofertas));
+      return true;
+    } catch (e) {
+      storageOk = false;
+      return false;
+    }
+  }
+
+  /* ---------- Cálculo ---------- */
+  function calcular(d) {
+    const kmTotal = d.distancia * 2;
+    const litros = d.consumo > 0 ? kmTotal / d.consumo : 0;
+    const combustivel = litros * d.preco;
+    const alimentacao = d.alimentacaoDia * d.diarias;
+    const total = d.hospedagem + combustivel + alimentacao;
+    return { kmTotal, litros, combustivel, alimentacao, total };
+  }
+
+  function lerFormulario() {
+    return {
+      nome: $('nome').value.trim(),
+      local: $('local').value.trim(),
+      checkin: $('checkin').value,
+      checkout: $('checkout').value,
+      link: $('link').value.trim(),
+      obs: $('obs').value.trim(),
+      hospedagem: numField('hospedagem'),
+      distancia: numField('distancia'),
+      consumo: numField('consumo'),
+      preco: numField('preco'),
+      alimentacaoDia: numField('alimentacao'),
+      diarias: Math.floor(numField('diarias'))
+    };
+  }
+
+  function atualizarResultado() {
+    const d = lerFormulario();
+    const r = calcular(d);
+    $('r-hospedagem').textContent = brl.format(d.hospedagem);
+    $('r-combustivel').textContent = brl.format(r.combustivel);
+    $('r-alimentacao').textContent = brl.format(r.alimentacao);
+    $('r-total').textContent = brl.format(r.total);
+    $('r-detalhe-comb').textContent = `Ida e volta: ${num.format(r.kmTotal)} km · ${num.format(r.litros)} litros`;
+    $('r-detalhe-alim').textContent = `${d.diarias} ${d.diarias === 1 ? 'diária' : 'diárias'} × ${brl.format(d.alimentacaoDia)}`;
+  }
+
+  /* ---------- Datas ---------- */
+  function noites(checkin, checkout) {
+    if (!checkin || !checkout) return null;
+    const a = new Date(checkin + 'T00:00:00Z');
+    const b = new Date(checkout + 'T00:00:00Z');
+    const diff = Math.round((b - a) / 86400000);
+    return diff > 0 ? diff : null;
+  }
+
+  function formatarData(iso) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  function sincronizarDiarias() {
+    const n = noites($('checkin').value, $('checkout').value);
+    if (n !== null) $('diarias').value = n;
+  }
+
+  /* ---------- Mensagens ---------- */
+  let msgTimer;
+  function mensagem(texto, tipo) {
+    const el = $('msg');
+    el.textContent = texto;
+    el.className = 'msg ' + (tipo || '');
+    clearTimeout(msgTimer);
+    if (tipo === 'ok') msgTimer = setTimeout(() => { el.textContent = ''; el.className = 'msg'; }, 4000);
+  }
+
+  /* ---------- Salvar / editar / excluir ---------- */
+  function linkSeguro(url) {
+    try {
+      const u = new URL(url);
+      return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function salvar() {
+    const d = lerFormulario();
+
+    if (!d.nome) { mensagem('Informe o nome da oferta para salvar.', 'error'); $('nome').focus(); return; }
+    if (d.checkin && d.checkout && d.checkout <= d.checkin) {
+      mensagem('O check-out precisa ser depois do check-in.', 'error');
+      $('checkout').focus();
+      return;
+    }
+    if (d.link && !linkSeguro(d.link)) {
+      mensagem('O link precisa começar com http:// ou https://.', 'error');
+      $('link').focus();
+      return;
+    }
+
+    const agora = Date.now();
+    if (editingId) {
+      const i = ofertas.findIndex(o => o.id === editingId);
+      if (i >= 0) ofertas[i] = Object.assign({}, ofertas[i], d, { atualizadoEm: agora });
+      else ofertas.push(Object.assign({ id: editingId, criadoEm: agora }, d));
+    } else {
+      ofertas.push(Object.assign({ id: 'o' + agora + Math.random().toString(36).slice(2, 6), criadoEm: agora }, d));
+    }
+
+    if (!persistir()) {
+      mensagem('Não foi possível salvar no navegador (armazenamento indisponível ou cheio).', 'error');
+      return;
+    }
+
+    const atualizou = !!editingId;
+    sairDoModoEdicao();
+    $('form').reset();
+    atualizarResultado();
+    renderizar();
+    mensagem(atualizou ? 'Oferta atualizada.' : 'Oferta salva.', 'ok');
+  }
+
+  function editar(id) {
+    const o = ofertas.find(x => x.id === id);
+    if (!o) return;
+    $('nome').value = o.nome || '';
+    $('local').value = o.local || '';
+    $('checkin').value = o.checkin || '';
+    $('checkout').value = o.checkout || '';
+    $('link').value = o.link || '';
+    $('obs').value = o.obs || '';
+    $('hospedagem').value = o.hospedagem || '';
+    $('distancia').value = o.distancia || '';
+    $('consumo').value = o.consumo || '';
+    $('preco').value = o.preco || '';
+    $('alimentacao').value = o.alimentacaoDia || '';
+    $('diarias').value = o.diarias || '';
+    editingId = id;
+    $('banner').classList.add('on');
+    $('btn-salvar').textContent = 'Atualizar oferta';
+    $('btn-limpar').textContent = 'Cancelar edição';
+    atualizarResultado();
+    mensagem('', '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    $('nome').focus({ preventScroll: true });
+  }
+
+  function sairDoModoEdicao() {
+    editingId = null;
+    $('banner').classList.remove('on');
+    $('btn-salvar').textContent = 'Salvar oferta';
+    $('btn-limpar').textContent = 'Limpar';
+  }
+
+  function excluir(id) {
+    const o = ofertas.find(x => x.id === id);
+    if (!o) return;
+    if (!confirm(`Excluir a oferta "${o.nome}"?`)) return;
+    ofertas = ofertas.filter(x => x.id !== id);
+    persistir();
+    if (editingId === id) { sairDoModoEdicao(); $('form').reset(); atualizarResultado(); }
+    renderizar();
+  }
+
+  /* ---------- Lista ---------- */
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  const chaveLocal = s => (s || '').trim().toLowerCase();
+
+  function atualizarFiltroLocal() {
+    const select = $('f-local');
+    const atual = select.value;
+    const mapa = new Map();
+    ofertas.forEach(o => {
+      const k = chaveLocal(o.local);
+      if (k && !mapa.has(k)) mapa.set(k, o.local.trim());
+    });
+    select.textContent = '';
+    const todos = el('option', '', 'Todos os locais');
+    todos.value = '';
+    select.appendChild(todos);
+    [...mapa.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+      .forEach(([k, nome]) => {
+        const op = el('option', '', nome);
+        op.value = k;
+        select.appendChild(op);
+      });
+    select.value = mapa.has(atual) ? atual : '';
+  }
+
+  function renderizar() {
+    atualizarFiltroLocal();
+    const lista = $('lista');
+    lista.textContent = '';
+
+    if (!ofertas.length) {
+      lista.appendChild(el('p', 'empty', 'Nenhuma oferta salva ainda. Preencha o formulário e clique em "Salvar oferta".'));
+      return;
+    }
+
+    // Menor total por local (considerando todas as ofertas do local)
+    const menorPorLocal = new Map();
+    const contagemPorLocal = new Map();
+    const enriquecidas = ofertas.map(o => {
+      const r = calcular({
+        hospedagem: o.hospedagem || 0, distancia: o.distancia || 0, consumo: o.consumo || 0,
+        preco: o.preco || 0, alimentacaoDia: o.alimentacaoDia || 0, diarias: o.diarias || 0
+      });
+      const k = chaveLocal(o.local);
+      if (k) {
+        contagemPorLocal.set(k, (contagemPorLocal.get(k) || 0) + 1);
+        if (!menorPorLocal.has(k) || r.total < menorPorLocal.get(k)) menorPorLocal.set(k, r.total);
+      }
+      return { o, r, porDiaria: o.diarias > 0 ? r.total / o.diarias : null };
+    });
+
+    const filtro = $('f-local').value;
+    let itens = enriquecidas.filter(x => !filtro || chaveLocal(x.o.local) === filtro);
+
+    const ordem = $('f-ordem').value;
+    const cmp = {
+      'total-asc': (a, b) => a.r.total - b.r.total,
+      'total-desc': (a, b) => b.r.total - a.r.total,
+      'diaria-asc': (a, b) => (a.porDiaria ?? Infinity) - (b.porDiaria ?? Infinity),
+      'checkin-asc': (a, b) => (a.o.checkin || '9999').localeCompare(b.o.checkin || '9999'),
+      'recente': (a, b) => b.o.criadoEm - a.o.criadoEm
+    }[ordem];
+    itens.sort(cmp);
+
+    itens.forEach(({ o, r, porDiaria }) => {
+      const k = chaveLocal(o.local);
+      const melhor = k && contagemPorLocal.get(k) > 1 && r.total === menorPorLocal.get(k);
+
+      const card = el('article', 'offer' + (melhor ? ' best' : ''));
+
+      const head = el('div', 'offer-head');
+      const esq = el('div');
+      esq.appendChild(el('h3', '', o.nome));
+      if (o.local) esq.appendChild(el('div', 'offer-place', o.local));
+      if (melhor) esq.appendChild(el('span', 'badge', `Mais barata em ${o.local}`));
+      const dir = el('div', 'offer-total');
+      dir.appendChild(el('strong', '', brl.format(r.total)));
+      if (porDiaria !== null) dir.appendChild(el('small', '', `${brl.format(porDiaria)} por diária`));
+      head.append(esq, dir);
+      card.appendChild(head);
+
+      const meta = el('div', 'offer-meta');
+      if (o.checkin || o.checkout) {
+        const n = noites(o.checkin, o.checkout);
+        const periodo = `${formatarData(o.checkin) || '?'} a ${formatarData(o.checkout) || '?'}` +
+          (n ? ` (${n} ${n === 1 ? 'noite' : 'noites'})` : '');
+        meta.appendChild(el('span', '', periodo));
+      }
+      meta.appendChild(el('span', '', `Hospedagem ${brl.format(o.hospedagem || 0)}`));
+      meta.appendChild(el('span', '', `Combustível ${brl.format(r.combustivel)}`));
+      meta.appendChild(el('span', '', `Alimentação ${brl.format(r.alimentacao)}`));
+      card.appendChild(meta);
+
+      if (o.obs) card.appendChild(el('p', 'offer-obs', o.obs));
+
+      const href = o.link ? linkSeguro(o.link) : null;
+      if (href) {
+        const a = el('a', 'offer-link', 'Abrir página da oferta');
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        card.appendChild(a);
+      }
+
+      const acoes = el('div', 'offer-actions');
+      const bEd = el('button', 'small', 'Editar');
+      bEd.type = 'button';
+      bEd.addEventListener('click', () => editar(o.id));
+      const bEx = el('button', 'small danger', 'Excluir');
+      bEx.type = 'button';
+      bEx.addEventListener('click', () => excluir(o.id));
+      acoes.append(bEd, bEx);
+      card.appendChild(acoes);
+
+      lista.appendChild(card);
+    });
+
+    if (!itens.length) lista.appendChild(el('p', 'empty', 'Nenhuma oferta para este local.'));
+  }
+
+  /* ---------- Eventos ---------- */
+  $('form').addEventListener('input', atualizarResultado);
+  $('checkin').addEventListener('change', () => { sincronizarDiarias(); atualizarResultado(); });
+  $('checkout').addEventListener('change', () => { sincronizarDiarias(); atualizarResultado(); });
+  $('form').addEventListener('submit', e => { e.preventDefault(); salvar(); });
+  $('form').addEventListener('reset', () => {
+    sairDoModoEdicao();
+    mensagem('', '');
+    setTimeout(atualizarResultado, 0);
+  });
+  $('f-local').addEventListener('change', renderizar);
+  $('f-ordem').addEventListener('change', renderizar);
+
+  carregar();
+  atualizarResultado();
+  renderizar();
+  if (!storageOk) mensagem('O armazenamento do navegador não está disponível: as ofertas não serão guardadas.', 'error');
+</script>
+</body>
+</html>
