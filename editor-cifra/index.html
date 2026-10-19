@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor de cifras</title>
+<style>
+  :root {
+    --bg: #e6ebf1;
+    --panel: #ffffff;
+    --ink: #1a2230;
+    --muted: #667085;
+    --line: #d3dae4;
+    --chord: #1f45c4;
+    --mono: "Courier New", ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; min-height: 100vh;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 20px; align-items: start;
+  }
+  @media (max-width: 800px) { body { grid-template-columns: 1fr; } }
+
+  .editor {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .editor label, .editor .lbl { font-weight: 600; margin-top: 8px; }
+  .editor input, .editor textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px;
+    font: inherit; color: inherit; background: #fff;
+  }
+  .editor textarea { font-family: var(--mono); min-height: 320px; resize: vertical; line-height: 1.4; }
+  .editor input:focus, .editor textarea:focus, button:focus-visible { outline: 2px solid var(--chord); outline-offset: 1px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 4px 0 8px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+  }
+  .btn.primary { background: var(--chord); border-color: var(--chord); color: #fff; }
+
+  .sheet-wrap {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 28px 32px; min-height: 320px;
+  }
+  #sheetTitle { font: 700 28px/1.2 "Palatino Linotype", Palatino, Georgia, serif; margin: 0; }
+  .head { margin-bottom: 24px; }
+  #sheetKey { margin: 6px 0 0; font: 600 16px var(--mono); color: var(--chord); text-align: left; }
+  #sheetTitle.ph { color: #a4adbb; font-weight: 400; font-style: italic; }
+  #sheet { font-family: var(--mono); font-size: 16px; overflow-x: auto; padding-bottom: 6px; }
+  .empty-msg { color: var(--muted); font-family: system-ui, sans-serif; font-size: 14px; }
+
+  .row { width: max-content; min-width: 100%; }
+  .chords { position: relative; height: 1.7em; cursor: pointer; border-radius: 3px; }
+  .chords:hover { background: rgba(31, 69, 196, .06); }
+  .chords::after {
+    content: ""; position: absolute; top: 2px; bottom: 2px; left: var(--mx, 0); width: 1ch;
+    background: var(--chord); opacity: 0; border-radius: 2px; pointer-events: none;
+  }
+  .chords:hover::after { opacity: .18; }
+  .chord {
+    position: absolute; top: 0; left: calc(var(--col) * 1ch);
+    font-weight: 700; color: var(--chord); line-height: 1.7em; white-space: pre; cursor: pointer;
+  }
+  .chord:hover { text-decoration: underline; }
+  .lyric { white-space: pre; line-height: 1.3; }
+  .gap { height: 1.2em; }
+
+  .pop {
+    position: fixed; z-index: 50; background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(20, 30, 50, .22); padding: 8px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .pop[hidden], .pop [hidden] { display: none; }
+  .pop .row2 { display: flex; gap: 6px; }
+  .pop button {
+    font: 700 16px var(--mono); min-width: 38px; height: 38px; padding: 0 10px;
+    border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--chord); cursor: pointer;
+  }
+  .pop .row2 button { flex: 1; }
+  .pop button:hover, .pop button.on { background: var(--chord); border-color: var(--chord); color: #fff; }
+  .pop .toggle, .pop .remove { font: 600 14px system-ui, sans-serif; }
+  .pop .remove { color: #b42318; }
+  .pop .remove:hover { background: #b42318; border-color: #b42318; color: #fff; }
+  .pop .extra {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+    font: 14px var(--mono); color: var(--ink);
+  }
+
+  @media print {
+    @page { margin: 15mm; }
+    body { display: block; padding: 0; background: #fff; }
+    .editor, .pop, .empty-msg { display: none !important; }
+    .sheet-wrap { border: 0; padding: 0; min-height: 0; }
+    #sheetTitle.ph { display: none; }
+    #sheet { font-size: 10.5pt; overflow: visible; }
+    .chords { cursor: default; height: 1.7em; }
+    .chords.empty { height: .5em; }
+    .chords::after { display: none; }
+    .chord, #sheetKey { color: #000; }
+    .row { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<section class="editor">
+  <label for="title">Título da música</label>
+  <input id="title" type="text" placeholder="Ex.: Trem das Onze">
+
+  <label for="key">Tom da música</label>
+  <input id="key" type="text" placeholder="Ex.: G, Am, F#m">
+
+  <label for="lyrics">Letra</label>
+  <textarea id="lyrics" placeholder="Cole ou escreva a letra aqui. Uma linha em branco separa as estrofes."></textarea>
+  <p class="hint">Clique no espaço acima de uma linha da letra para colocar a cifra. Clique em uma cifra existente para trocá-la ou removê-la.</p>
+
+  <div class="lbl">Tonalidade</div>
+  <div class="actions">
+    <button class="btn" id="down" title="Descer meio tom">− ½ tom</button>
+    <button class="btn" id="up" title="Subir meio tom">+ ½ tom</button>
+    <button class="btn" id="swap" title="Trocar sustenidos por bemóis e vice-versa">♯ ⇄ ♭</button>
+  </div>
+
+  <div class="actions" style="margin-top:10px">
+    <button class="btn primary" id="print">Imprimir</button>
+    <button class="btn" id="clear">Limpar cifras</button>
+  </div>
+</section>
+
+<main class="sheet-wrap">
+  <header class="head">
+    <h1 id="sheetTitle" class="ph">Título da música</h1>
+    <p id="sheetKey" hidden></p>
+  </header>
+  <div id="sheet"></div>
+</main>
+
+<div id="pop1" class="pop" hidden></div>
+<div id="pop2" class="pop" hidden></div>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const titleIn = $('#title'), lyricsIn = $('#lyrics'), sheet = $('#sheet'), sheetTitle = $('#sheetTitle');
+  const keyIn = $('#key'), sheetKey = $('#sheetKey');
+  const pop1 = $('#pop1'), pop2 = $('#pop2');
+  const KEY = 'editor-cifras-v1';
+
+  let chords = {};      // { indiceDaLinha: { coluna: 'C#' } }
+  let pending = null;   // { line, col, letter }
+  let CW = null;        // largura de um caractere
+  let timer = null;
+
+  /* ---------- utilitários de acordes ---------- */
+  // Cada cifra: { root: 'C', acc: '#' | 'b' | '', minor: false, extra: '7M' }
+  const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const FLATS  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+  const BASE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const noteIdx = (L, a) => (BASE[L] + (a === '#' ? 1 : a === 'b' ? -1 : 0) + 12) % 12;
+  const split = n => [n[0], n.slice(1)];
+
+  function chordText(c) { return c.root + c.acc + (c.minor ? 'm' : '') + c.extra; }
+
+  // Subir usa sustenidos; descer usa bemóis
+  function shiftNote(L, a, steps) {
+    return split((steps > 0 ? SHARPS : FLATS)[(noteIdx(L, a) + steps + 12) % 12]);
+  }
+  // Sustenido <-> bemol (notas naturais ficam como estão)
+  function swapNote(L, a) {
+    const i = noteIdx(L, a);
+    return split(a === '#' ? FLATS[i] : a === 'b' ? SHARPS[i] : L);
+  }
+  // Aplica f à raiz e também ao baixo de acordes com barra (ex.: C/E)
+  function mapChord(c, f) {
+    const [root, acc] = f(c.root, c.acc);
+    const extra = c.extra.replace(/\/([A-G])([#b]?)$/, (m, L, a) => '/' + f(L, a).join(''));
+    return { root, acc, minor: c.minor, extra };
+  }
+  // Converte o formato antigo (texto) para o formato novo
+  function migrate(all) {
+    Object.keys(all).forEach(l => Object.keys(all[l]).forEach(c => {
+      const v = all[l][c];
+      if (typeof v === 'string') all[l][c] = { root: v[0], acc: v.slice(1), minor: false, extra: '' };
+    }));
+    return all;
+  }
+
+  /* ---------- persistência ---------- */
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify({ title: titleIn.value, key: keyIn.value, lyrics: lyricsIn.value, chords })); } catch (e) {}
+  }
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (d) { titleIn.value = d.title || ''; keyIn.value = d.key || ''; lyricsIn.value = d.lyrics || ''; chords = migrate(d.chords || {}); }
+  } catch (e) {}
+
+  /* ---------- renderização ---------- */
+  function getLines() {
+    return lyricsIn.value.replace(/\r/g, '').replace(/\t/g, '    ').split('\n');
+  }
+
+  function getCW() {
+    if (CW) return CW;
+    const s = document.createElement('span');
+    s.textContent = '0'.repeat(20);
+    s.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+    sheet.appendChild(s);
+    CW = s.getBoundingClientRect().width / 20;
+    s.remove();
+    return CW;
+  }
+
+  function render() {
+    CW = null;
+    const t = titleIn.value.trim();
+    sheetTitle.textContent = t || 'Título da música';
+    sheetTitle.classList.toggle('ph', !t);
+    const k = keyIn.value.trim();
+    sheetKey.hidden = !k; sheetKey.textContent = 'Tom: ' + k;
+    document.title = t ? t + ' – Cifra' : 'Editor de cifras';
+    sheet.innerHTML = '';
+
+    if (!lyricsIn.value.trim()) {
+      sheet.innerHTML = '<div class="empty-msg">A letra aparece aqui assim que você escrever.</div>';
+      return;
+    }
+
+    getLines().forEach((text, i) => {
+      if (!text.trim()) {
+        const g = document.createElement('div'); g.className = 'gap'; sheet.appendChild(g); return;
+      }
+      const row = document.createElement('div'); row.className = 'row';
+      const cr = document.createElement('div'); cr.className = 'chords';
+      cr.dataset.line = i; cr.dataset.len = text.length;
+      let any = false;
+      const map = chords[i] || {};
+      Object.keys(map).forEach(c => {
+        if (+c > text.length) return;
+        const sp = document.createElement('span');
+        sp.className = 'chord'; sp.dataset.col = c; sp.style.setProperty('--col', c);
+        sp.textContent = chordText(map[c]);
+        cr.appendChild(sp); any = true;
+      });
+      cr.classList.toggle('empty', !any);
+      const lt = document.createElement('div'); lt.className = 'lyric'; lt.textContent = text;
+      row.append(cr, lt); sheet.appendChild(row);
+    });
+  }
+
+  function colFromEvent(e, cr) {
+    const chord = e.target.closest('.chord');
+    if (chord) return +chord.dataset.col;
+    const col = Math.floor((e.clientX - cr.getBoundingClientRect().left) / getCW());
+    return Math.max(0, Math.min(col, +cr.dataset.len));
+  }
+
+  /* ---------- popups ---------- */
+  const mk = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text) n.textContent = text;
+    return n;
+  };
+  const btn = (text, onClick, cls) => {
+    const b = mk('button', cls, text); b.type = 'button'; b.addEventListener('click', onClick); return b;
+  };
+  const extraInputs = [];
+  function extraInput() {
+    const i = mk('input', 'extra');
+    i.type = 'text'; i.autocomplete = 'off'; i.spellcheck = false;
+    i.placeholder = 'Variação: 7M, 7(11+)…';
+    i.setAttribute('aria-label', 'Variação da cifra');
+    i.addEventListener('input', () => {
+      pending.extra = i.value;
+      extraInputs.forEach(o => { if (o !== i) o.value = i.value; });
+    });
+    i.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); if (pending.root && pending.acc !== null) setChord(pending.acc); }
+    });
+    extraInputs.push(i);
+    return i;
+  }
+
+  // Popup 1: letras + variação + remover
+  const lettersRow = mk('div', 'row2');
+  'ABCDEFG'.split('').forEach(L => lettersRow.appendChild(btn(L, e => openAccidentals(L, e.clientX, e.clientY))));
+  const removeBtn = btn('Remover cifra', removeChord, 'remove');
+  pop1.append(lettersRow, extraInput(), removeBtn);
+
+  // Popup 2: acidentes + menor (toggle) + variação
+  const accRow = mk('div', 'row2');
+  const accBtns = [['♯', '#'], ['♭', 'b'], ['', '']].map(([sym, v]) => {
+    const b = btn('', () => setChord(v));
+    b.dataset.sym = sym; b.dataset.acc = v;
+    accRow.appendChild(b);
+    return b;
+  });
+  const minorBtn = btn('Menor (m)', () => { pending.minor = !pending.minor; syncPop2(); }, 'toggle');
+  pop2.append(accRow, minorBtn, extraInput());
+
+  function syncPop2() {
+    accBtns.forEach(b => {
+      b.textContent = pending.root + b.dataset.sym + (pending.minor ? 'm' : '');
+      b.classList.toggle('on', pending.acc === b.dataset.acc);
+    });
+    minorBtn.classList.toggle('on', pending.minor);
+    minorBtn.setAttribute('aria-pressed', pending.minor);
+  }
+
+  function place(pop, x, y) {
+    pop.hidden = false;
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = Math.max(4, Math.min(x - 14, innerWidth - w - 4)) + 'px';
+    pop.style.top = Math.max(4, Math.min(y - 14, innerHeight - h - 4)) + 'px';
+  }
+  function hideAll() {
+    pop1.hidden = true; pop2.hidden = true;
+    clearTimeout(timer); timer = null;
+  }
+
+  function openLetters(x, y) {
+    const ex = (chords[pending.line] || {})[pending.col];
+    Object.assign(pending, {
+      root: ex ? ex.root : null, acc: ex ? ex.acc : null,
+      minor: ex ? ex.minor : false, extra: ex ? ex.extra : ''
+    });
+    extraInputs.forEach(i => { i.value = pending.extra; });
+    removeBtn.hidden = !ex;
+    pop2.hidden = true;
+    clearTimeout(timer); timer = null;
+    place(pop1, x, y);
+  }
+
+  function openAccidentals(L, x, y) {
+    if (pending.root !== L) pending.acc = null;
+    pending.root = L;
+    syncPop2();
+    pop1.hidden = true;
+    clearTimeout(timer); timer = null;
+    place(pop2, x, y);
+  }
+
+  function setChord(acc) {
+    const { line, col } = pending;
+    (chords[line] = chords[line] || {})[col] = {
+      root: pending.root, acc, minor: pending.minor, extra: pending.extra.replace(/\s+/g, '')
+    };
+    save(); render(); hideAll();
+  }
+
+  function removeChord() {
+    const { line, col } = pending;
+    if (chords[line]) { delete chords[line][col]; if (!Object.keys(chords[line]).length) delete chords[line]; }
+    save(); render(); hideAll();
+  }
+
+  // Some depois de um breve intervalo quando o mouse sai do popup (exceto enquanto se digita nele)
+  const typingIn = p => p.contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
+  document.addEventListener('mousemove', e => {
+    const open = pop1.hidden ? (pop2.hidden ? null : pop2) : pop1;
+    if (!open) return;
+    const r = open.getBoundingClientRect();
+    const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (inside || typingIn(open)) { clearTimeout(timer); timer = null; }
+    else if (!timer) timer = setTimeout(() => { timer = null; if (!typingIn(open)) hideAll(); }, 350);
+  });
+  document.addEventListener('mousedown', e => { if (!e.target.closest('.pop')) hideAll(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideAll(); });
+
+  /* ---------- interações na cifra ---------- */
+  sheet.addEventListener('mousemove', e => {
+    const cr = e.target.closest('.chords');
+    if (cr) cr.style.setProperty('--mx', colFromEvent(e, cr) + 'ch');
+  });
+  sheet.addEventListener('click', e => {
+    const cr = e.target.closest('.chords');
+    if (!cr) return;
+    pending = { line: +cr.dataset.line, col: colFromEvent(e, cr) };
+    openLetters(e.clientX, e.clientY);
+  });
+
+  /* ---------- controles ---------- */
+  titleIn.addEventListener('input', () => { render(); save(); });
+  keyIn.addEventListener('input', () => { render(); save(); });
+
+  // Aplica f a todas as cifras e ao tom (quando ele é uma nota simples, como G, Am ou F#m)
+  function mapAll(f) {
+    Object.keys(chords).forEach(l => Object.keys(chords[l]).forEach(c => { chords[l][c] = mapChord(chords[l][c], f); }));
+    const m = keyIn.value.trim().match(/^([A-G])([#b]?)(m?)$/);
+    if (m) keyIn.value = f(m[1], m[2]).join('') + m[3];
+    save(); render();
+  }
+  $('#up').addEventListener('click', () => mapAll((L, a) => shiftNote(L, a, 1)));
+  $('#down').addEventListener('click', () => mapAll((L, a) => shiftNote(L, a, -1)));
+  $('#swap').addEventListener('click', () => mapAll(swapNote));
+  lyricsIn.addEventListener('input', () => { render(); save(); });
+  $('#print').addEventListener('click', () => { hideAll(); window.print(); });
+  $('#clear').addEventListener('click', () => {
+    if (Object.keys(chords).length && confirm('Remover todas as cifras desta música?')) {
+      chords = {}; save(); render();
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
