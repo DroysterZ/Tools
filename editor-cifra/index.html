@@ -61,6 +61,7 @@
     background: var(--chord); opacity: 0; border-radius: 2px; pointer-events: none;
   }
   .chords:hover::after { opacity: .18; }
+  .chords.only { background: rgba(31, 69, 196, .05); border-bottom: 1px dashed var(--line); margin-bottom: .3em; }
   .chord {
     position: absolute; top: 0; left: calc(var(--col) * 1ch);
     font-weight: 700; color: var(--chord); line-height: 1.7em; white-space: pre; cursor: pointer;
@@ -71,24 +72,30 @@
 
   .pop {
     position: fixed; z-index: 50; background: #fff; border: 1px solid var(--line); border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(20, 30, 50, .22); padding: 8px;
-    display: flex; flex-direction: column; gap: 6px;
+    box-shadow: 0 8px 24px rgba(20, 30, 50, .22); padding: 8px; width: 330px; max-width: calc(100vw - 8px);
+    display: flex; flex-direction: column; gap: 8px;
   }
   .pop[hidden], .pop [hidden] { display: none; }
-  .pop .row2 { display: flex; gap: 6px; }
+  .pop .extra {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px;
+    font: 15px var(--mono); color: var(--ink);
+  }
+  .pop .extra:focus { outline: 2px solid var(--chord); outline-offset: 0; }
   .pop button {
-    font: 700 16px var(--mono); min-width: 38px; height: 38px; padding: 0 10px;
+    font: 700 14px var(--mono); min-height: 30px; padding: 4px 9px;
     border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--chord); cursor: pointer;
   }
-  .pop .row2 button { flex: 1; }
-  .pop button:hover, .pop button.on { background: var(--chord); border-color: var(--chord); color: #fff; }
-  .pop .toggle, .pop .remove { font: 600 14px system-ui, sans-serif; }
-  .pop .remove { color: #b42318; }
+  .pop button:hover { background: var(--chord); border-color: var(--chord); color: #fff; }
+  .pop .remove { font: 600 14px system-ui, sans-serif; color: #b42318; }
   .pop .remove:hover { background: #b42318; border-color: #b42318; color: #fff; }
-  .pop .extra {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
-    font: 14px var(--mono); color: var(--ink);
+  .used {
+    max-height: min(50vh, 360px); overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+    border-top: 1px solid var(--line); padding-top: 8px;
   }
+  .used-title { font: 600 13px system-ui, sans-serif; color: var(--muted); }
+  .grp { display: flex; gap: 8px; align-items: flex-start; }
+  .grp-name { flex: 0 0 34px; padding-top: 6px; font: 700 14px var(--mono); color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 
   @media print {
     @page { margin: 15mm; }
@@ -99,6 +106,8 @@
     #sheet { font-size: 10.5pt; overflow: visible; }
     .chords { cursor: default; height: 1.7em; }
     .chords.empty { height: .5em; }
+    .chords.only { background: none; border-bottom: 0; }
+    .chords.only.empty { display: none; }
     .chords::after { display: none; }
     .chord, #sheetKey { color: #000; }
     .row { break-inside: avoid; }
@@ -116,7 +125,10 @@
 
   <label for="lyrics">Letra</label>
   <textarea id="lyrics" placeholder="Cole ou escreva a letra aqui. Uma linha em branco separa as estrofes."></textarea>
-  <p class="hint">Clique no espaço acima de uma linha da letra para colocar a cifra. Clique em uma cifra existente para trocá-la ou removê-la.</p>
+  <div class="actions">
+    <button class="btn" id="addLine" type="button" title="Insere uma linha só de acordes (introdução, interlúdio…)">+ Linha de acordes</button>
+  </div>
+  <p class="hint">Clique no espaço acima da letra para digitar a cifra. “+ Linha de acordes” cria uma linha sem letra (intro, interlúdio): abaixo da linha do cursor, ou acima se o cursor estiver no início dela. Para rótulos como [Intro], use uma linha comum.</p>
 
   <div class="lbl">Tonalidade</div>
   <div class="actions">
@@ -140,23 +152,24 @@
 </main>
 
 <div id="pop1" class="pop" hidden></div>
-<div id="pop2" class="pop" hidden></div>
 
 <script>
 (function () {
   const $ = s => document.querySelector(s);
   const titleIn = $('#title'), lyricsIn = $('#lyrics'), sheet = $('#sheet'), sheetTitle = $('#sheetTitle');
   const keyIn = $('#key'), sheetKey = $('#sheetKey');
-  const pop1 = $('#pop1'), pop2 = $('#pop2');
+  const pop1 = $('#pop1');
   const KEY = 'editor-cifras-v1';
 
   let chords = {};      // { indiceDaLinha: { coluna: 'C#' } }
   let pending = null;   // { line, col, letter }
   let CW = null;        // largura de um caractere
   let timer = null;
+  let prevLines = [];
 
   /* ---------- utilitários de acordes ---------- */
-  // Cada cifra: { root: 'C', acc: '#' | 'b' | '', minor: false, extra: '7M' }
+  // Cada cifra é um texto livre digitado pelo usuário (ex.: 'Am7', 'C/E')
+  const ONLY_COLS = 60;   // largura (em colunas) de uma linha só de acordes
   const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const FLATS  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
   const BASE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -175,18 +188,65 @@
     return split(a === '#' ? FLATS[i] : a === 'b' ? SHARPS[i] : L);
   }
   // Aplica f à raiz e também ao baixo de acordes com barra (ex.: C/E)
-  function mapChord(c, f) {
-    const [root, acc] = f(c.root, c.acc);
-    const extra = c.extra.replace(/\/([A-G])([#b]?)$/, (m, L, a) => '/' + f(L, a).join(''));
-    return { root, acc, minor: c.minor, extra };
+  function mapChord(text, f) {
+    const m = text.match(/^([A-G])([#b]?)(.*)$/);
+    if (!m) return text;
+    const [root, acc] = f(m[1], m[2]);
+    return root + acc + m[3].replace(/\/([A-G])([#b]?)$/, (x, L, a) => '/' + f(L, a).join(''));
   }
-  // Converte o formato antigo (texto) para o formato novo
+  // Converte formatos antigos (objetos) para texto
   function migrate(all) {
     Object.keys(all).forEach(l => Object.keys(all[l]).forEach(c => {
       const v = all[l][c];
-      if (typeof v === 'string') all[l][c] = { root: v[0], acc: v.slice(1), minor: false, extra: '' };
+      if (v && typeof v === 'object') all[l][c] = chordText(v);
+      else if (typeof v === 'string') all[l][c] = cleanChord(v);
     }));
     return all;
+  }
+  // Limpa o que foi digitado: sem espaços, ♯/♭ viram #/b, e a letra inicial e a primeira letra após a barra ficam maiúsculas
+  function cleanChord(t) {
+    return t.replace(/\s+/g, '').replace(/♯/g, '#').replace(/♭/g, 'b')
+      .replace(/^[a-g]/, c => c.toUpperCase())
+      .replace(/\/([a-g])/g, (m, c) => '/' + c.toUpperCase());
+  }
+  // Acordes já usados, agrupados pela nota (C, D, E...) a partir de C; C, C#, Db, Cm, C7M, C/E ficam todos no grupo C
+  function usedChords() {
+    const set = new Set();
+    Object.values(chords).forEach(m => Object.values(m).forEach(t => set.add(t)));
+    const groups = {};
+    set.forEach(t => {
+      const key = /^[A-G]/.test(t) ? t[0] : 'Outros';
+      (groups[key] = groups[key] || []).push(t);
+    });
+    // dentro do grupo: natural, sustenido, bemol; depois maior, menor, números (7M, 9...), outros, baixo (C/E)
+    const parts = t => { const a = (t.slice(1).match(/^[#b]/) || [''])[0]; return [a, t.slice(1 + a.length)]; };
+    const rank = r => !r ? 0 : /^m(?!aj)/.test(r) ? 1 : /^\d/.test(r) ? 2 : r[0] === '/' ? 4 : 3;
+    const accRank = { '': 0, '#': 1, b: 2 };
+    return Object.keys(groups).sort((a, b) => (BASE[a] ?? 99) - (BASE[b] ?? 99)).map(k => ({
+      root: k,
+      items: groups[k].sort((x, y) => {
+        if (k === 'Outros') return x.localeCompare(y);
+        const [ax, rx] = parts(x), [ay, ry] = parts(y);
+        return accRank[ax] - accRank[ay] || rank(rx) - rank(ry) || x.localeCompare(y, 'pt', { numeric: true });
+      })
+    }));
+  }
+  // Ajusta as cifras quando linhas da letra são inseridas, apagadas ou editadas
+  function remap(oldL, newL) {
+    const max = Math.min(oldL.length, newL.length);
+    let p = 0, q = 0;
+    while (p < max && oldL[p] === newL[p]) p++;
+    while (q < max - p && oldL[oldL.length - 1 - q] === newL[newL.length - 1 - q]) q++;
+    const out = {};
+    Object.keys(chords).forEach(k => {
+      const i = +k;
+      let j = null;
+      if (i < p) j = i;
+      else if (i >= oldL.length - q) j = i + newL.length - oldL.length;
+      else if (i - p < newL.length - q - p) j = i;
+      if (j !== null) out[j] = chords[k];
+    });
+    chords = out;
   }
 
   /* ---------- persistência ---------- */
@@ -235,19 +295,27 @@
       }
       const row = document.createElement('div'); row.className = 'row';
       const cr = document.createElement('div'); cr.className = 'chords';
-      cr.dataset.line = i; cr.dataset.len = text.length;
+      const only = text.trim() === '~';   // linha só de acordes
+      const len = only ? ONLY_COLS : text.length;
+      cr.dataset.line = i; cr.dataset.len = len;
+      cr.classList.toggle('only', only);
+      if (only) cr.style.width = (len + 1) + 'ch';
       let any = false;
       const map = chords[i] || {};
       Object.keys(map).forEach(c => {
-        if (+c > text.length) return;
+        if (+c > len) return;
         const sp = document.createElement('span');
         sp.className = 'chord'; sp.dataset.col = c; sp.style.setProperty('--col', c);
-        sp.textContent = chordText(map[c]);
+        sp.textContent = map[c];
         cr.appendChild(sp); any = true;
       });
       cr.classList.toggle('empty', !any);
-      const lt = document.createElement('div'); lt.className = 'lyric'; lt.textContent = text;
-      row.append(cr, lt); sheet.appendChild(row);
+      row.appendChild(cr);
+      if (!only) {
+        const lt = document.createElement('div'); lt.className = 'lyric'; lt.textContent = text;
+        row.appendChild(lt);
+      }
+      sheet.appendChild(row);
     });
   }
 
@@ -258,7 +326,7 @@
     return Math.max(0, Math.min(col, +cr.dataset.len));
   }
 
-  /* ---------- popups ---------- */
+  /* ---------- popup de cifra ---------- */
   const mk = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -268,47 +336,36 @@
   const btn = (text, onClick, cls) => {
     const b = mk('button', cls, text); b.type = 'button'; b.addEventListener('click', onClick); return b;
   };
-  const extraInputs = [];
-  function extraInput() {
-    const i = mk('input', 'extra');
-    i.type = 'text'; i.autocomplete = 'off'; i.spellcheck = false;
-    i.placeholder = 'Variação: 7M, 7(11+)…';
-    i.setAttribute('aria-label', 'Variação da cifra');
-    i.addEventListener('input', () => {
-      pending.extra = i.value;
-      extraInputs.forEach(o => { if (o !== i) o.value = i.value; });
-    });
-    i.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); if (pending.root && pending.acc !== null) setChord(pending.acc); }
-    });
-    extraInputs.push(i);
-    return i;
-  }
 
-  // Popup 1: letras + variação + remover
-  const lettersRow = mk('div', 'row2');
-  'ABCDEFG'.split('').forEach(L => lettersRow.appendChild(btn(L, e => openAccidentals(L, e.clientX, e.clientY))));
-  const removeBtn = btn('Remover cifra', removeChord, 'remove');
-  pop1.append(lettersRow, extraInput(), removeBtn);
+  const input = mk('input', 'extra');
+  input.type = 'text'; input.autocomplete = 'off'; input.spellcheck = false;
+  input.placeholder = 'Digite a cifra: Am7, C/E, F#m7(b5)…';
+  input.setAttribute('aria-label', 'Cifra');
+  const removeBtn = btn('Remover cifra', () => removeChord(), 'remove');
+  const usedBox = mk('div', 'used');
+  pop1.append(input, removeBtn, usedBox);
 
-  // Popup 2: acidentes + menor (toggle) + variação
-  const accRow = mk('div', 'row2');
-  const accBtns = [['♯', '#'], ['♭', 'b'], ['', '']].map(([sym, v]) => {
-    const b = btn('', () => setChord(v));
-    b.dataset.sym = sym; b.dataset.acc = v;
-    accRow.appendChild(b);
-    return b;
+  let dirty = false;   // o usuário já digitou algo: o popup não some ao tirar o mouse
+  input.addEventListener('input', () => { dirty = true; });
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const t = cleanChord(input.value);
+    if (t) setChord(t); else removeChord();   // campo vazio = limpa a cifra
   });
-  const minorBtn = btn('Menor (m)', () => { pending.minor = !pending.minor; syncPop2(); }, 'toggle');
-  pop2.append(accRow, minorBtn, extraInput());
 
-  function syncPop2() {
-    accBtns.forEach(b => {
-      b.textContent = pending.root + b.dataset.sym + (pending.minor ? 'm' : '');
-      b.classList.toggle('on', pending.acc === b.dataset.acc);
+  function fillUsed() {
+    usedBox.innerHTML = '';
+    const groups = usedChords();
+    if (!groups.length) return;
+    usedBox.appendChild(mk('div', 'used-title', 'Acordes usados'));
+    groups.forEach(g => {
+      const row = mk('div', 'grp');
+      const chips = mk('div', 'chips');
+      g.items.forEach(t => chips.appendChild(btn(t, () => setChord(t))));
+      row.append(mk('span', 'grp-name', g.root), chips);
+      usedBox.appendChild(row);
     });
-    minorBtn.classList.toggle('on', pending.minor);
-    minorBtn.setAttribute('aria-pressed', pending.minor);
   }
 
   function place(pop, x, y) {
@@ -318,37 +375,23 @@
     pop.style.top = Math.max(4, Math.min(y - 14, innerHeight - h - 4)) + 'px';
   }
   function hideAll() {
-    pop1.hidden = true; pop2.hidden = true;
-    clearTimeout(timer); timer = null;
-  }
-
-  function openLetters(x, y) {
-    const ex = (chords[pending.line] || {})[pending.col];
-    Object.assign(pending, {
-      root: ex ? ex.root : null, acc: ex ? ex.acc : null,
-      minor: ex ? ex.minor : false, extra: ex ? ex.extra : ''
-    });
-    extraInputs.forEach(i => { i.value = pending.extra; });
-    removeBtn.hidden = !ex;
-    pop2.hidden = true;
-    clearTimeout(timer); timer = null;
-    place(pop1, x, y);
-  }
-
-  function openAccidentals(L, x, y) {
-    if (pending.root !== L) pending.acc = null;
-    pending.root = L;
-    syncPop2();
     pop1.hidden = true;
     clearTimeout(timer); timer = null;
-    place(pop2, x, y);
   }
 
-  function setChord(acc) {
+  function openChordPopup(x, y) {
+    const cur = (chords[pending.line] || {})[pending.col] || '';
+    input.value = cur; dirty = false;
+    removeBtn.hidden = !cur;
+    fillUsed();
+    clearTimeout(timer); timer = null;
+    place(pop1, x, y);
+    input.focus({ preventScroll: true }); input.select();
+  }
+
+  function setChord(text) {
     const { line, col } = pending;
-    (chords[line] = chords[line] || {})[col] = {
-      root: pending.root, acc, minor: pending.minor, extra: pending.extra.replace(/\s+/g, '')
-    };
+    (chords[line] = chords[line] || {})[col] = text;
     save(); render(); hideAll();
   }
 
@@ -358,15 +401,13 @@
     save(); render(); hideAll();
   }
 
-  // Some depois de um breve intervalo quando o mouse sai do popup (exceto enquanto se digita nele)
-  const typingIn = p => p.contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
+  // Some depois de um breve intervalo quando o mouse sai do popup (exceto depois de digitar nele)
   document.addEventListener('mousemove', e => {
-    const open = pop1.hidden ? (pop2.hidden ? null : pop2) : pop1;
-    if (!open) return;
-    const r = open.getBoundingClientRect();
+    if (pop1.hidden) return;
+    const r = pop1.getBoundingClientRect();
     const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-    if (inside || typingIn(open)) { clearTimeout(timer); timer = null; }
-    else if (!timer) timer = setTimeout(() => { timer = null; if (!typingIn(open)) hideAll(); }, 350);
+    if (inside || dirty) { clearTimeout(timer); timer = null; }
+    else if (!timer) timer = setTimeout(() => { timer = null; if (!dirty) hideAll(); }, 350);
   });
   document.addEventListener('mousedown', e => { if (!e.target.closest('.pop')) hideAll(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') hideAll(); });
@@ -380,7 +421,7 @@
     const cr = e.target.closest('.chords');
     if (!cr) return;
     pending = { line: +cr.dataset.line, col: colFromEvent(e, cr) };
-    openLetters(e.clientX, e.clientY);
+    openChordPopup(e.clientX, e.clientY);
   });
 
   /* ---------- controles ---------- */
@@ -397,7 +438,31 @@
   $('#up').addEventListener('click', () => mapAll((L, a) => shiftNote(L, a, 1)));
   $('#down').addEventListener('click', () => mapAll((L, a) => shiftNote(L, a, -1)));
   $('#swap').addEventListener('click', () => mapAll(swapNote));
-  lyricsIn.addEventListener('input', () => { render(); save(); });
+  function onLyrics() {
+    const now = getLines();
+    remap(prevLines, now); prevLines = now;
+    render(); save();
+  }
+  lyricsIn.addEventListener('input', onLyrics);
+
+  // Linha só de acordes = linha com apenas "~" na letra
+  $('#addLine').addEventListener('click', () => {
+    const v = lyricsIn.value;
+    const pos = lyricsIn.selectionStart == null ? v.length : lyricsIn.selectionStart;
+    const start = pos === 0 ? 0 : v.lastIndexOf('\n', pos - 1) + 1;
+    let caret;
+    if (pos === start) {   // cursor no início de uma linha: insere acima
+      lyricsIn.value = v.slice(0, start) + '~' + (v.length > start ? '\n' : '') + v.slice(start);
+      caret = start + 1;
+    } else {               // senão: insere abaixo da linha atual
+      let end = v.indexOf('\n', pos);
+      if (end === -1) end = v.length;
+      lyricsIn.value = v.slice(0, end) + '\n~' + v.slice(end);
+      caret = end + 2;
+    }
+    lyricsIn.focus(); lyricsIn.setSelectionRange(caret, caret);
+    onLyrics();
+  });
   $('#print').addEventListener('click', () => { hideAll(); window.print(); });
   $('#clear').addEventListener('click', () => {
     if (Object.keys(chords).length && confirm('Remover todas as cifras desta música?')) {
@@ -405,6 +470,7 @@
     }
   });
 
+  prevLines = getLines();
   render();
 })();
 </script>
