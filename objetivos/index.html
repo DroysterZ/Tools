@@ -54,6 +54,12 @@ main{padding:1.5rem clamp(1rem,4vw,3rem);max-width:820px;width:100%}
 .item .x{opacity:.5}
 .item:hover .x,.item .x:focus-visible{opacity:1}
 .sec .add{padding:.2rem .7rem .7rem}
+.sec-h{cursor:grab}
+.goals li{cursor:grab}
+.dragging{opacity:.4}
+.over-before{box-shadow:0 -3px 0 var(--accent)}
+.over-after{box-shadow:0 3px 0 var(--accent)}
+.over-into{outline:2px dashed var(--accent);outline-offset:-2px}
 .empty{color:var(--muted);padding:2rem 0}
 .hidden{display:none}
 @media (max-width:760px){
@@ -108,7 +114,7 @@ function render(){
   const list = document.getElementById('goals');
   list.innerHTML = state.goals.length ? state.goals.map(g => {
     const st = goalStats(g), p = pct(st);
-    return `<li><button class="goal ${g.id===state.current?'active':''}" data-a="open" data-g="${g.id}">
+    return `<li draggable="true" data-dg="${g.id}"><button class="goal ${g.id===state.current?'active':''}" data-a="open" data-g="${g.id}">
       ${esc(g.name)}<small>${st.done}/${st.total} concluídos</small>
       <div class="bar ${p===100&&st.total?'full':''}"><i style="width:${p}%"></i></div></button></li>`;
   }).join('') : '<li class="empty">Nenhum objetivo ainda.</li>';
@@ -141,7 +147,7 @@ function secHTML(s){
   const st = stats(s.items);
   const complete = st.total && st.done === st.total;
   return `<section class="sec ${complete?'complete':''}" data-s="${s.id}">
-    <div class="sec-h">
+    <div class="sec-h" draggable="true">
       <button class="toggle" data-a="toggle-sec" aria-expanded="${!s.collapsed}">${s.collapsed?'▸':'▾'} ${esc(s.name)}</button>
       <span class="count">${st.done}/${st.total}</span>
       <button class="ghost" data-a="ren-sec">Renomear</button>
@@ -149,7 +155,7 @@ function secHTML(s){
     </div>
     <div class="${s.collapsed?'hidden':''}">
       <ul class="items">${s.items.map(i => `
-        <li class="item ${i.done?'done':''}" data-i="${i.id}">
+        <li class="item ${i.done?'done':''}" data-i="${i.id}" draggable="true">
           <label><input type="checkbox" data-a="check" ${i.done?'checked':''}><span>${esc(i.text)}</span></label>
           <button class="ghost x" data-a="ren-item" aria-label="Editar item">Editar</button>
           <button class="ghost x danger" data-a="del-item" aria-label="Excluir item">✕</button>
@@ -254,6 +260,111 @@ document.getElementById('file').addEventListener('change', e => {
   r.readAsText(f);
   e.target.value = '';
 });
+
+// arrastar e soltar
+// objetivos: reordenam na lateral | seções: reordenam, ou soltas num objetivo da lateral vão para ele
+// tarefas: reordenam, trocam de seção, ou passam o mouse sobre um objetivo da lateral para abri-lo e soltar em uma seção dele
+let drag = null, hoverTimer = null, hoverGoal = null;
+
+function clearMarks(){
+  document.querySelectorAll('.over-before,.over-after,.over-into').forEach(n => n.classList.remove('over-before','over-after','over-into'));
+}
+function stopHover(){ clearTimeout(hoverTimer); hoverTimer = null; hoverGoal = null; }
+function endDrag(){
+  clearMarks(); stopHover();
+  document.querySelectorAll('.dragging').forEach(n => n.classList.remove('dragging'));
+  drag = null;
+}
+
+document.addEventListener('dragstart', e => {
+  const el = e.target.closest ? e.target : null;
+  if (!el) return;
+  const goal = state.goals.find(g => g.id === state.current);
+  let item;
+  if ((item = el.closest('.item'))){
+    drag = {type:'item', g:state.current, s:item.closest('.sec').dataset.s, i:item.dataset.i, node:item};
+  } else if (el.closest('.sec-h')){
+    const sec = el.closest('.sec');
+    drag = {type:'sec', g:state.current, s:sec.dataset.s, node:sec};
+    e.dataTransfer.setDragImage(sec, 20, 20);
+  } else if (el.closest('li[data-dg]')){
+    const li = el.closest('li[data-dg]');
+    drag = {type:'goal', g:li.dataset.dg, node:li};
+  } else return;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', drag.type);
+  const n = drag.node;
+  setTimeout(() => n.classList.add('dragging'), 0);
+});
+
+function resolve(e){
+  const el = e.target.closest ? e.target : e.target.parentElement;
+  if (!el) return null;
+  const gl = el.closest('li[data-dg]'), it = el.closest('.item'), sc = el.closest('.sec');
+  const pos = n => { const r = n.getBoundingClientRect(); return e.clientY < r.top + r.height/2 ? 'before' : 'after'; };
+  if (drag.type === 'goal'){
+    return gl && gl.dataset.dg !== drag.g ? {goal:gl.dataset.dg, pos:pos(gl), node:gl} : null;
+  }
+  if (drag.type === 'sec'){
+    if (gl) return gl.dataset.dg !== drag.g ? {goal:gl.dataset.dg, pos:'into', node:gl} : null;
+    if (sc && sc.dataset.s !== drag.s) return {sec:sc.dataset.s, pos:pos(sc), node:sc};
+    return null;
+  }
+  if (gl) return {hover:gl.dataset.dg};
+  if (it && it.dataset.i !== drag.i) return {sec:sc.dataset.s, item:it.dataset.i, pos:pos(it), node:it};
+  if (sc) return {sec:sc.dataset.s, pos:'into', node:sc};
+  return null;
+}
+
+document.addEventListener('dragover', e => {
+  if (!drag) return;
+  const r = resolve(e);
+  clearMarks();
+  if (r && r.hover){
+    // tarefa sobre um objetivo da lateral: abre depois de um instante
+    if (r.hover !== state.current && hoverGoal !== r.hover){
+      stopHover(); hoverGoal = r.hover;
+      hoverTimer = setTimeout(() => { state.current = r.hover; save(); render(); stopHover(); }, 600);
+    }
+    return;
+  }
+  stopHover();
+  if (!r) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  r.node.classList.add(r.pos === 'before' ? 'over-before' : r.pos === 'after' ? 'over-after' : 'over-into');
+});
+
+document.addEventListener('drop', e => {
+  if (!drag) return;
+  const r = resolve(e);
+  if (!r || r.hover){ endDrag(); return; }
+  e.preventDefault();
+  const sg = state.goals.find(g => g.id === drag.g);
+  const place = (arr, refIdx) => refIdx < 0 ? arr.length : refIdx + (r.pos === 'after' ? 1 : 0);
+
+  if (drag.type === 'goal'){
+    const [m] = state.goals.splice(state.goals.findIndex(g => g.id === drag.g), 1);
+    state.goals.splice(place(state.goals, state.goals.findIndex(g => g.id === r.goal)), 0, m);
+  } else if (drag.type === 'sec'){
+    const [m] = sg.sections.splice(sg.sections.findIndex(s => s.id === drag.s), 1);
+    if (r.goal){
+      state.goals.find(g => g.id === r.goal).sections.push(m);
+    } else {
+      const tg = cur();
+      tg.sections.splice(place(tg.sections, tg.sections.findIndex(s => s.id === r.sec)), 0, m);
+    }
+  } else {
+    const ss = sg.sections.find(s => s.id === drag.s);
+    const [m] = ss.items.splice(ss.items.findIndex(i => i.id === drag.i), 1);
+    const ts = cur().sections.find(s => s.id === r.sec);
+    ts.items.splice(r.item ? place(ts.items, ts.items.findIndex(i => i.id === r.item)) : ts.items.length, 0, m);
+    ts.collapsed = false;
+  }
+  endDrag(); save(); render();
+});
+
+document.addEventListener('dragend', endDrag);
 
 if (!cur()) state.current = state.goals[0]?.id ?? null;
 render();
