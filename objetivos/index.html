@@ -75,7 +75,7 @@ main{padding:1.5rem clamp(1rem,4vw,3rem);max-width:820px;width:100%}
   <aside>
     <h1>Meus objetivos</h1>
     <form class="add" id="f-goal">
-      <input type="text" id="n-goal" placeholder="Novo objetivo (ex.: Zerar Terraria)" aria-label="Nome do novo objetivo" autocomplete="off">
+      <input type="text" id="n-goal" placeholder="Novo objetivo" aria-label="Nome do novo objetivo" autocomplete="off">
       <button class="primary" type="submit">Criar</button>
     </form>
     <ul class="goals" id="goals"></ul>
@@ -137,7 +137,7 @@ function render(){
     <p class="sum">${st.done} de ${st.total} concluídos (${p}%)</p>
     <div class="bar ${p===100&&st.total?'full':''}"><i style="width:${p}%"></i></div>
     <form class="add newsec" data-f="sec">
-      <input type="text" placeholder="Nova seção (ex.: Pré-bosses)" aria-label="Nome da nova seção" autocomplete="off">
+      <input type="text" placeholder="Nova seção" aria-label="Nome da nova seção" autocomplete="off">
       <button class="primary" type="submit">Adicionar seção</button>
     </form>
     ${g.sections.length ? g.sections.map(secHTML).join('') : '<p class="empty">Adicione uma seção para organizar as tarefas deste objetivo.</p>'}`;
