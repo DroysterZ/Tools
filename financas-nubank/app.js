@@ -277,6 +277,7 @@ function renderGraficos() {
   const lista = filtrados();
   const soma = lista.filter(l => l.valor > 0).reduce((s, l) => s + l.valor, 0);
   $('contagem').textContent = `${lista.length} lançamento(s) · ${brl(soma)}`;
+  renderEvolucao();
 }
 
 let regraArrastada = null;
@@ -383,6 +384,107 @@ function importarJSON(txt) {
   render();
 }
 
+/* ---------- Aba Evolução mensal ---------- */
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const periodo = { inicio: '', fim: '' }; // vazio = usa a data do primeiro/último gasto
+
+function intervaloGastos() {
+  const datas = estado.lancamentos.filter(l => l.valor > 0 && l.data).map(l => l.data).sort();
+  return datas.length ? { inicio: datas[0], fim: datas[datas.length - 1] } : { inicio: '', fim: '' };
+}
+
+// Lista os meses (AAAA-MM) de uma data inicial até a final, inclusive os sem gastos.
+function mesesEntre(ini, fim) {
+  const meses = [];
+  let [a, m] = ini.slice(0, 7).split('-').map(Number);
+  const [fa, fm] = fim.slice(0, 7).split('-').map(Number);
+  while (a < fa || (a === fa && m <= fm)) {
+    meses.push(`${a}-${String(m).padStart(2, '0')}`);
+    if (++m > 12) { m = 1; a++; }
+  }
+  return meses;
+}
+
+const nomeMes = ym => `${MESES[Number(ym.slice(5)) - 1]}/${ym.slice(2, 4)}`;
+
+// Diferença de gasto: subir é ruim (vermelho), cair é bom (verde).
+function delta(atual, anterior) {
+  const d = atual - anterior;
+  const sinal = d > 0 ? '+' : d < 0 ? '−' : '';
+  let texto = d === 0 ? 'sem variação' : `${sinal}${brl(Math.abs(d))}`;
+  if (d !== 0 && anterior > 0) texto += ` (${sinal}${Math.round(Math.abs(d) / anterior * 100)}%)`;
+  return h('span', { className: `delta ${d > 0 ? 'sobe' : d < 0 ? 'desce' : 'igual'}`, textContent: texto });
+}
+
+function renderEvolucao() {
+  const auto = intervaloGastos();
+  const ini = periodo.inicio || auto.inicio;
+  const fim = periodo.fim || auto.fim;
+  $('ev-inicio').value = ini;
+  $('ev-fim').value = fim;
+  const aviso = texto => $('ev-conteudo').replaceChildren(h('p', { className: 'vazio', textContent: texto }));
+  if (!ini || !fim) return aviso('Importe lançamentos para acompanhar a evolução dos gastos.');
+  if (ini > fim) return aviso('A data inicial é posterior à data final.');
+
+  const meses = mesesEntre(ini, fim);
+  const totais = Object.fromEntries(meses.map(m => [m, 0]));
+  const porCat = {};
+  estado.lancamentos.filter(l => l.valor > 0 && l.data >= ini && l.data <= fim).forEach(l => {
+    const m = l.data.slice(0, 7);
+    porCat[l.categoria] = porCat[l.categoria] || {};
+    porCat[l.categoria][m] = (porCat[l.categoria][m] || 0) + l.valor;
+    totais[m] += l.valor;
+  });
+  const soma = o => Object.values(o).reduce((s, v) => s + v, 0);
+  const cats = Object.keys(porCat).sort((a, b) => soma(porCat[b]) - soma(porCat[a]));
+  const primeiro = meses[0], ultimo = meses[meses.length - 1];
+
+  // Resumo
+  const resumo = h('p', { className: 'ev-resumo' }, `Total no período: ${brl(soma(totais))}`);
+  if (meses.length > 1) resumo.append(` · de ${nomeMes(primeiro)} para ${nomeMes(ultimo)}: `, delta(totais[ultimo], totais[primeiro]));
+  else resumo.append(' · escolha um período com 2 ou mais meses para ver as diferenças.');
+
+  // Barras do total por mês
+  const maior = Math.max(...meses.map(m => totais[m]), 1);
+  const barras = h('div', { className: 'ev-barras' }, ...meses.map(m => {
+    const barra = h('div', { className: 'ev-bar' });
+    barra.style.height = `${Math.max(2, Math.round(totais[m] / maior * 120))}px`;
+    return h('div', { className: 'ev-col' }, h('span', { className: 'ev-val', textContent: brl(totais[m]) }), barra, h('span', { textContent: nomeMes(m) }));
+  }));
+
+  // Tabela: categoria x mês, com a diferença em relação ao mês anterior
+  const linhaEv = (rotulo, valores, classe, corPonto) => {
+    const th = h('th', { scope: 'row' });
+    if (corPonto) { const p = h('span', { className: 'ponto' }); p.style.background = corPonto; th.append(p); }
+    th.append(rotulo);
+    const tr = h('tr', { className: classe || '' }, th);
+    meses.forEach((m, i) => {
+      const v = valores[m] || 0;
+      tr.append(h('td', {}, brl(v), ...(i > 0 ? [delta(v, valores[meses[i - 1]] || 0)] : [])));
+    });
+    if (meses.length > 1) tr.append(h('td', {}, delta(valores[ultimo] || 0, valores[primeiro] || 0)));
+    return tr;
+  };
+  const cab = h('tr', {}, h('th', { textContent: 'Categoria' }), ...meses.map(m => h('th', { textContent: nomeMes(m) })),
+    ...(meses.length > 1 ? [h('th', { textContent: `${nomeMes(primeiro)} → ${nomeMes(ultimo)}` })] : []));
+  const tabela = h('table', { className: 'ev-tabela' }, h('thead', {}, cab),
+    h('tbody', {}, ...cats.map(c => linhaEv(c, porCat[c], '', cor(c))), linhaEv('Total', totais, 'total')));
+
+  $('ev-conteudo').replaceChildren(resumo, barras, h('div', { className: 'tabela-wrap' }, tabela));
+}
+
+/* ---------- Abas ---------- */
+const ABAS = { lancamentos: 'aba-lancamentos', evolucao: 'aba-evolucao' };
+
+function mostrarAba(nome) {
+  Object.entries(ABAS).forEach(([n, id]) => { $(id).hidden = n !== nome; });
+  document.querySelectorAll('[role="tab"]').forEach(b => {
+    const ativa = b.dataset.aba === nome;
+    b.setAttribute('aria-selected', String(ativa));
+    b.tabIndex = ativa ? 0 : -1;
+  });
+}
+
 /* ---------- Eventos ---------- */
 // Clicar no cabeçalho ordena por aquela coluna; clicar de novo inverte a direção.
 document.querySelectorAll('th[data-campo]').forEach(th => {
@@ -453,5 +555,19 @@ $('arquivo-json').onchange = e => {
   leitor.readAsText(arq, 'utf-8');
   e.target.value = '';
 };
+
+document.querySelectorAll('[role="tab"]').forEach(b => {
+  b.onclick = () => mostrarAba(b.dataset.aba);
+  b.onkeydown = e => { // setas esquerda/direita trocam de aba
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const abas = [...document.querySelectorAll('[role="tab"]')];
+    const prox = abas[(abas.indexOf(b) + (e.key === 'ArrowRight' ? 1 : -1) + abas.length) % abas.length];
+    mostrarAba(prox.dataset.aba);
+    prox.focus();
+  };
+});
+$('ev-inicio').onchange = e => { periodo.inicio = e.target.value; renderEvolucao(); };
+$('ev-fim').onchange = e => { periodo.fim = e.target.value; renderEvolucao(); };
+$('ev-auto').onclick = () => { periodo.inicio = ''; periodo.fim = ''; renderEvolucao(); };
 
 render();

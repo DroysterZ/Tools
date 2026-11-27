@@ -22,7 +22,12 @@
   </div>
 </header>
 
-<main>
+<nav class="abas" role="tablist" aria-label="Seções">
+  <button class="aba" role="tab" id="tab-lancamentos" data-aba="lancamentos" aria-selected="true" aria-controls="aba-lancamentos">Lançamentos</button>
+  <button class="aba" role="tab" id="tab-evolucao" data-aba="evolucao" aria-selected="false" aria-controls="aba-evolucao" tabindex="-1">Evolução mensal</button>
+</nav>
+
+<main id="aba-lancamentos" role="tabpanel" aria-labelledby="tab-lancamentos">
   <section class="lista" aria-label="Lançamentos">
     <div class="filtros">
       <input type="search" id="busca" placeholder="Buscar por descrição" aria-label="Buscar por descrição">
@@ -59,6 +64,17 @@
       <ul id="regras" class="regras"></ul>
     </details>
   </aside>
+</main>
+
+<main id="aba-evolucao" class="evolucao" role="tabpanel" aria-labelledby="tab-evolucao" hidden>
+  <section class="painel">
+    <div class="filtros">
+      <label>De <input type="date" id="ev-inicio"></label>
+      <label>até <input type="date" id="ev-fim"></label>
+      <button id="ev-auto" class="btn">Primeiro e último gasto</button>
+    </div>
+    <div id="ev-conteudo" class="ev-conteudo"></div>
+  </section>
 </main>
 
 <dialog id="dlg-importar">
