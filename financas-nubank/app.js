@@ -341,14 +341,18 @@ function renderRegras() {
 function render() { renderFiltro(); renderCabecalho(); renderTabela(); renderGraficos(); renderRegras(); }
 
 /* ---------- Backup em JSON (transportar os dados entre navegadores/computadores) ---------- */
-function baixarJSON() {
-  const pacote = { app: 'analise-fatura', versao: 1, exportadoEm: new Date().toISOString(), dados: estado };
-  const url = URL.createObjectURL(new Blob([JSON.stringify(pacote, null, 2)], { type: 'application/json' }));
-  const a = h('a', { href: url, download: `analise-fatura-${new Date().toLocaleDateString('sv-SE')}.json` });
+function baixarArquivo(conteudo, nome, tipo) {
+  const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
+  const a = h('a', { href: url, download: nome });
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function baixarJSON() {
+  const pacote = { app: 'analise-fatura', versao: 1, exportadoEm: new Date().toISOString(), dados: estado };
+  baixarArquivo(JSON.stringify(pacote, null, 2), `analise-fatura-${new Date().toLocaleDateString('sv-SE')}.json`, 'application/json');
 }
 
 // Valida e limpa os dados vindos do arquivo; devolve null se o formato não servir.
@@ -416,15 +420,12 @@ function delta(atual, anterior) {
   return h('span', { className: `delta ${d > 0 ? 'sobe' : d < 0 ? 'desce' : 'igual'}`, textContent: texto });
 }
 
-function renderEvolucao() {
+function dadosEvolucao() {
   const auto = intervaloGastos();
   const ini = periodo.inicio || auto.inicio;
   const fim = periodo.fim || auto.fim;
-  $('ev-inicio').value = ini;
-  $('ev-fim').value = fim;
-  const aviso = texto => $('ev-conteudo').replaceChildren(h('p', { className: 'vazio', textContent: texto }));
-  if (!ini || !fim) return aviso('Importe lançamentos para acompanhar a evolução dos gastos.');
-  if (ini > fim) return aviso('A data inicial é posterior à data final.');
+  if (!ini || !fim) return { ini, fim, erro: 'Importe lançamentos para acompanhar a evolução dos gastos.' };
+  if (ini > fim) return { ini, fim, erro: 'A data inicial é posterior à data final.' };
 
   const meses = mesesEntre(ini, fim);
   const totais = Object.fromEntries(meses.map(m => [m, 0]));
@@ -437,6 +438,47 @@ function renderEvolucao() {
   });
   const soma = o => Object.values(o).reduce((s, v) => s + v, 0);
   const cats = Object.keys(porCat).sort((a, b) => soma(porCat[b]) - soma(porCat[a]));
+  return { ini, fim, meses, totais, porCat, cats, soma };
+}
+
+// Texto compacto para colar/anexar em uma LLM: CSV puro, sem "R$", sem separador de milhar, sem formatação.
+function textoEvolucao(d) {
+  const arred = v => Math.round(v * 100) / 100;
+  const n = v => (arred(v) === 0 ? '0' : arred(v).toFixed(2));
+  const dn = v => (arred(v) > 0 ? '+' : '') + n(v);
+  const campo = c => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c);
+  const { meses, totais, porCat, cats, soma } = d;
+  const valor = (c, m) => porCat[c][m] || 0;
+  const linhas = [
+    `Gastos de cartão de crédito por categoria e mês, em R$, de ${d.ini} a ${d.fim}. Mês = data da compra; pagamentos e créditos excluídos.`,
+    'Gasto por mês:',
+    ['categoria', ...meses, 'total'].join(','),
+    ...cats.map(c => [campo(c), ...meses.map(m => n(valor(c, m))), n(soma(porCat[c]))].join(',')),
+    ['TOTAL', ...meses.map(m => n(totais[m])), n(soma(totais))].join(','),
+  ];
+  if (meses.length > 1) {
+    const par = meses.slice(1); // cada mês comparado com o anterior
+    linhas.push(
+      'Variação vs mês anterior (R$; + = gastou mais):',
+      ['categoria', ...par].join(','),
+      ...cats.map(c => [campo(c), ...par.map((m, i) => dn(valor(c, m) - valor(c, meses[i])))].join(',')),
+      ['TOTAL', ...par.map((m, i) => dn(totais[m] - totais[meses[i]]))].join(','),
+    );
+  }
+  return linhas.join('\n') + '\n';
+}
+
+function baixarEvolucao() {
+  const d = dadosEvolucao();
+  if (d.erro) { alert(d.erro); return; }
+  baixarArquivo(textoEvolucao(d), `evolucao-gastos-${d.ini}_${d.fim}.txt`, 'text/plain;charset=utf-8');
+}
+
+function renderEvolucao() {
+  const { ini, fim, erro, meses, totais, porCat, cats, soma } = dadosEvolucao();
+  $('ev-inicio').value = ini;
+  $('ev-fim').value = fim;
+  if (erro) { $('ev-conteudo').replaceChildren(h('p', { className: 'vazio', textContent: erro })); return; }
   const primeiro = meses[0], ultimo = meses[meses.length - 1];
 
   // Resumo
@@ -568,6 +610,7 @@ document.querySelectorAll('[role="tab"]').forEach(b => {
 });
 $('ev-inicio').onchange = e => { periodo.inicio = e.target.value; renderEvolucao(); };
 $('ev-fim').onchange = e => { periodo.fim = e.target.value; renderEvolucao(); };
+$('ev-baixar').onclick = baixarEvolucao;
 $('ev-auto').onclick = () => { periodo.inicio = ''; periodo.fim = ''; renderEvolucao(); };
 
 render();

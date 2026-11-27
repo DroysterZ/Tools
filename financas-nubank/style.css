@@ -89,6 +89,7 @@ dialog p{margin:0 0 16px;color:var(--suave)}
 
 main.evolucao{display:block;padding:0 28px 32px}
 .filtros label{display:flex;align-items:center;gap:6px;color:var(--suave)}
+#ev-baixar{margin-left:auto}
 .ev-conteudo{padding:16px}
 .ev-resumo{margin:0 0 18px;color:var(--suave)}
 .ev-resumo .delta{display:inline}
